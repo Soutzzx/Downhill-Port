@@ -78,6 +78,7 @@ static const char *const actions[] = {
     "Sprint", "Powerslide"
 };
 static int suppress_keys;
+void keyboard_reset(void); /* used by binding setters below */
 
 int keyboard_bind_count(void) { return KEYS; }
 int keyboard_bind_key(int index) { return index >= 0 && index < KEYS ? keys[index].key : 0; }
@@ -98,6 +99,13 @@ int keyboard_bind_valid(int key)
 }
 /* A duplicate binding swaps the other action, rather than activating both
    actions when the player presses a single key. */
+int keyboard_bind_load(int index, int key)
+{
+    if (index < 0 || index >= KEYS || index == 8 || !keyboard_bind_valid(key)) return 0;
+    keys[index].key = (uint8_t)key;
+    keyboard_reset();
+    return 1;
+}
 int keyboard_bind_set(int index, int key)
 {
     if (index < 0 || index >= KEYS || index == 8 || !keyboard_bind_valid(key))
