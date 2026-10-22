@@ -59,6 +59,8 @@ class Builder(tk.Tk):
         self.stage = "idle"
         self.mode = ""
         self.start_time = 0.0
+        self.build_started_at = 0.0
+        self.source_count = None
         self.percent = 0
         self.link_start = 0.0
         self.last_update = 0.0
@@ -178,13 +180,15 @@ class Builder(tk.Tk):
             obj_dir = CLEAN / "tree" / "build" / "port" / "obj"
             source_root = ROOT / "src"
             now = time.monotonic()
-            if now - self.last_update >= 2:
+            if now - self.last_update >= 6:
                 self.last_update = now
                 try:
                     # Counting objects is an estimate: generated filenames may differ
                     # from source paths, so cap at 65 until the script confirms success.
-                    source_count = sum(1 for f in source_root.rglob("*") if f.suffix in (".c", ".cpp"))
-                    done = sum(1 for _ in obj_dir.rglob("*.o")) if obj_dir.is_dir() else 0
+                    if self.source_count is None:
+                        self.source_count = sum(1 for f in source_root.rglob("*") if f.suffix in (".c", ".cpp"))
+                    source_count = self.source_count
+                    done = sum(1 for f in obj_dir.rglob("*.o") if f.stat().st_mtime >= self.build_started_at - 1) if obj_dir.is_dir() else 0
                     if source_count and done:
                         pct = min(65, 25 + int(40 * min(done, source_count) / source_count))
                         if pct >= self.percent:
@@ -193,7 +197,7 @@ class Builder(tk.Tk):
                     pass
         elif self.stage == "link":
             now = time.monotonic()
-            if now - self.last_update >= 3:
+            if now - self.last_update >= 6:
                 self.last_update = now
                 obj_dir = CLEAN / "tree" / "build" / "port" / "recomp"
                 try:
@@ -298,6 +302,8 @@ class Builder(tk.Tk):
         self.mode = mode
         self.stage = "setup"
         self.start_time = time.monotonic()
+        self.build_started_at = time.time()
+        self.source_count = None
         self.last_update = 0
         self.percent = 0
         self.set_percent(0, "Iniciando")
