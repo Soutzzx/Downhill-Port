@@ -65,15 +65,13 @@ static int loaded;
 static char footer[128];
 /* An in-game controls page, reusing the PC SETTINGS popup and its menu instance.
    No nested modal menu: the original page changes its rows when switching views. */
-enum { VIEW_PC, VIEW_KEYS_FIRST, VIEW_KEYS_MORE, VIEW_PADS };
+enum { VIEW_PC, VIEW_KEYS_FIRST, VIEW_KEYS_MORE };
 static int input_view;
 static int capture_index = -1, capture_phase;
-static char bind_text[19][72], pad_text[4][100];
+static char bind_text[19][72];
 static const char *const key_next = "More key bindings ->";
 static const char *const key_back = "Back to PC settings";
-static const char *const pad_open = "Controller detection / test";
 static const char *const key_restore = "Restore default keys";
-static const char *const pad_back = "Back to key bindings";
 
 static void save_bindings(void)
 {
@@ -110,8 +108,7 @@ static void view_set(MenuPage *p, int view, int cursor)
 {
     capture_stop();
     input_view = view;
-    p->title = view == VIEW_PC ? "PC SETTINGS" :
-               view == VIEW_PADS ? "CONTROLLERS" : "KEY BINDINGS";
+    p->title = view == VIEW_PC ? "PC SETTINGS" : "KEY BINDINGS";
     menu_page_rebuild_at(p, cursor);
 }
 static void start_capture(MenuPage *p, int index)
@@ -128,20 +125,6 @@ static void update_bindings(void)
         snprintf(bind_text[i], sizeof bind_text[i], "%-18.18s %s%s",
                  keyboard_bind_action(i), keyboard_bind_name(keyboard_bind_key(i)),
                  i == 8 ? " (fixed)" : capture_index == i ? " < PRESS KEY >" : "");
-}
-static void update_pads(void)
-{
-    for (int i = 0; i < 4; i++) {
-        char name[96] = "";
-        HostPad state;
-        int connected = host_pad_status(i, name, sizeof name, &state);
-        if (connected > 0)
-            snprintf(pad_text[i], sizeof pad_text[i], "P%d: %.24s  BTN:%04X",
-                     i + 1, name, state.buttons);
-        else
-            snprintf(pad_text[i], sizeof pad_text[i], "P%d: %s", i + 1,
-                     connected < 0 ? "SDL disabled / failed" : "No controller");
-    }
 }
 
 
@@ -237,29 +220,19 @@ static void page_build(MenuPage *p)
     } else if (input_view == VIEW_KEYS_MORE) {
         update_bindings();
         for (int i = 10; i < keyboard_bind_count(); i++) menu_page_row(p, bind_text[i], 1);
-        menu_page_row(p, pad_open, 1);
         menu_page_row(p, key_restore, 1);
         menu_page_row(p, "Previous key bindings <-", 1);
-    } else if (input_view == VIEW_PADS) {
-        update_pads();
-        for (int i = 0; i < 4; i++) menu_page_row(p, pad_text[i], 1);
-        menu_page_row(p, pad_back, 1);
     } else {
         for (int i = 0; i < ROWS; i++) {
             format(&rows[i]);
             menu_page_row(p, rows[i].text, 1);
         }
-        menu_page_row(p, "CONTROLS & CONTROLLERS  >", 1);
+        menu_page_row(p, "KEYBOARD BINDINGS  >", 1);
     }
 }
 
 static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
 {
-    if (input_view == VIEW_PADS) {
-        update_pads();
-        p->footer = "Plug controller in; buttons update live";
-        return;
-    }
     if (input_view == VIEW_KEYS_FIRST || input_view == VIEW_KEYS_MORE) {
         if (capture_index >= 0) {
             int key = capture_down();
@@ -286,7 +259,7 @@ static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
         return;
     }
     if (cursor == ROWS) {
-        p->footer = "CROSS: change keys and test controllers";
+        p->footer = "CROSS: remap keyboard keys";
         return;
     }
     const Row *r = cursor >= 0 && cursor < ROWS ? &rows[cursor] : NULL;
@@ -301,14 +274,13 @@ static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
 static void page_back(MenuPage *p)  /* Triangle: the values the page opened with, close */
 {
     if (capture_index >= 0) {
-        capture_stop();
         int row = input_view == VIEW_KEYS_FIRST ? capture_index : capture_index - 10;
+        capture_stop();
         menu_page_rebuild_at(p, row);
         return;
     }
     if (input_view == VIEW_KEYS_FIRST) { view_set(p, VIEW_PC, ROWS); return; }
     if (input_view == VIEW_KEYS_MORE) { view_set(p, VIEW_KEYS_FIRST, 10); return; }
-    if (input_view == VIEW_PADS) { view_set(p, VIEW_KEYS_MORE, 9); return; }
     for (int i = 0; i < ROWS; i++) {
         Row *r = &rows[i];
         if (r->selected == r->opened || r->opened < 0) continue;
@@ -332,13 +304,11 @@ static void page_accept(MenuPage *p, int index)
         else view_set(p, VIEW_PC, ROWS);
     } else if (input_view == VIEW_KEYS_MORE) {
         if (index < 9) start_capture(p, index + 10);
-        else if (index == 9) view_set(p, VIEW_PADS, 0);
-        else if (index == 10) {
+        else if (index == 9) {
             keyboard_bind_defaults();
             save_bindings();
-            menu_page_rebuild_at(p, 10);
+            menu_page_rebuild_at(p, 9);
         } else view_set(p, VIEW_KEYS_FIRST, 10);
-    } else if (input_view == VIEW_PADS) view_set(p, VIEW_KEYS_MORE, 9);
 }
 
 /* OPTIONS, item 9 (patched func_001F0160): run the page until it closes. */
