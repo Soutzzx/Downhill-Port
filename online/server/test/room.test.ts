@@ -108,6 +108,27 @@ describe("lobby", () => {
     expect(await three.closed()).toBe(4004);
   });
 
+  it("accepts eight racers and refuses the ninth", async () => {
+    const { host, code } = await Client.host("Player0");
+    host.sendJson({ type: "settings", maxPlayers: 8 });
+    await host.next((f) => typeof f === "string" && JSON.parse(f).maxPlayers === 8);
+    const clients = [host];
+    for (let i = 1; i < 8; i++) clients.push(await Client.join(code, `Player${i}`));
+    const ninth = await Client.connect(`/v1/rooms/${code}`);
+    ninth.hello("Player8");
+    expect((await ninth.json("error")).code).toBe("room_full");
+    expect(await ninth.closed()).toBe(4004);
+    for (const c of clients) c.sendJson({ type: "ready", ready: true });
+    await host.next((f) => typeof f === "string" && JSON.parse(f).type === "room" &&
+      JSON.parse(f).members?.length === 8 && JSON.parse(f).members.every((m: any) => m.ready));
+    host.sendJson({ type: "start" });
+    const started = await Promise.all(clients.map((c) => c.json("start")));
+    for (let i = 0; i < 8; i++) {
+      expect(started[i].yourSlot).toBe(i);
+      expect(started[i].players).toHaveLength(8);
+    }
+  });
+
   it("keeps settings host-only and lets players pick their own rider", async () => {
     const { host, code } = await Client.host();
     const bo = await Client.join(code, "Bo");
