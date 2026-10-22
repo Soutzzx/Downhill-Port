@@ -774,6 +774,39 @@ static void direct_pad(int port, HostPad *out)
     }
 }
 
+/* The diagnostic screen sees the same device path as the game, without merging keyboard
+   or scripted input. SDL may be disabled; in that case inspect the direct fallback. */
+int host_pad_status(int player, char *name, size_t size, HostPad *state)
+{
+    int result = gamepad_status(player, name, size, state);
+    if (result >= 0) return result;
+    if (player < 0 || player >= 4) return 0;
+    XInputGetStateFn get = xinput();
+    XState x;
+    if (get && get((DWORD)player, &x) == ERROR_SUCCESS) {
+        if (name && size) snprintf(name, size, "XInput (fallback)");
+        if (state) {
+            memset(state, 0, sizeof *state);
+            state->left_x = state->left_y = state->right_x = state->right_y = 128;
+            direct_pad(player, state);
+        }
+        return 1;
+    }
+    if (player == 0) {
+        SonyState sony;
+        if (sony_read(&sony)) {
+            if (name && size) snprintf(name, size, "Sony HID (fallback)");
+            if (state) {
+                memset(state, 0, sizeof *state);
+                state->left_x = state->left_y = state->right_x = state->right_y = 128;
+                direct_pad(player, state);
+            }
+            return 1;
+        }
+    }
+    return -1; /* no controller, SDL startup disabled or failed */
+}
+
 /* DHD_TEST_PAD=<name>: a test tool's buttons, one 16-bit word in shared memory of that name,
    merged into player 1's pad, so a tool can drive a window that doesn't have focus. */
 static void test_pad_merge(HostPad *out)
