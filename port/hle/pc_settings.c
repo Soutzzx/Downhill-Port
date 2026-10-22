@@ -251,7 +251,7 @@ static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
             p->footer = capture_phase == 0 ? "Release keys first" :
                         capture_phase == 1 ? "Press new key; ESC to cancel" : "Release key...";
         } else {
-            p->footer = input_view == VIEW_KEYS_MORE && cursor == 10
+            p->footer = input_view == VIEW_KEYS_MORE && cursor == 9
                         ? "Reset keyboard bindings to defaults"
                         : "CROSS: change key, TRIANGLE: back";
         }
@@ -309,6 +309,7 @@ static void page_accept(MenuPage *p, int index)
             save_bindings();
             menu_page_rebuild_at(p, 9);
         } else view_set(p, VIEW_KEYS_FIRST, 10);
+    }
 }
 
 /* OPTIONS, item 9 (patched func_001F0160): run the page until it closes. */
