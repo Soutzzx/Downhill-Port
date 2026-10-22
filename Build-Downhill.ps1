@@ -11,6 +11,35 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw 'Git is required: https://git-scm.com/downloads'
 }
+# The PC port invokes LLVM's clang by name. Diagnose missing tools before extracting the
+# game so a failed toolchain does not look like a game data problem.
+$clangCommand = Get-Command clang -ErrorAction SilentlyContinue
+$clangPath = if ($clangCommand) { $clangCommand.Source } else { $null }
+if (-not $clangPath) {
+    $candidates = @(
+        (Join-Path $env:ProgramFiles 'LLVM\bin\clang.exe'),
+        (Join-Path $env:USERPROFILE 'scoop\apps\llvm\current\bin\clang.exe')
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            $clangPath = $candidate
+            $env:PATH = "$(Split-Path -Parent $candidate);$env:PATH"
+            break
+        }
+    }
+}
+if (-not $clangPath) {
+    throw 'LLVM clang.exe was not found. Install LLVM for Windows (https://github.com/llvm/llvm-project/releases), ensure clang.exe is on PATH, reopen PowerShell, then retry. The game ISO is not the problem.'
+}
+$requiredLLVM = @('clang', 'clang-cl', 'lld-link', 'llvm-rc', 'llvm-nm', 'llvm-objcopy', 'llvm-cxxfilt')
+foreach ($tool in $requiredLLVM) {
+    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
+        throw "Missing LLVM tool: $tool. Install the full Windows LLVM toolchain and retry."
+    }
+}
+Write-Host "LLVM available: $clangPath" -ForegroundColor Green
+Write-Host 'This project also requires Visual Studio C++ Build Tools with MSVC x86 and Windows SDK.'
+
 $isoDir = Join-Path $PSScriptRoot 'iso'
 New-Item -ItemType Directory -Force -Path $isoDir | Out-Null
 $elf = Join-Path $isoDir 'SCUS_971.77'
