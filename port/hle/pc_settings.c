@@ -278,8 +278,9 @@ static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
             p->footer = capture_phase == 0 ? "Release keys first" :
                         capture_phase == 1 ? "Press new key; ESC to cancel" : "Release key...";
         } else {
-            p->footer = cursor == (input_view == VIEW_KEYS_MORE ? 10 : 10)
-                        ? "Use CROSS to select a row" : "CROSS: remap, TRIANGLE: back";
+            p->footer = input_view == VIEW_KEYS_MORE && cursor == 10
+                        ? "Reset keyboard bindings to defaults"
+                        : "CROSS: change key, TRIANGLE: back";
         }
         update_bindings();
         return;
@@ -301,7 +302,8 @@ static void page_back(MenuPage *p)  /* Triangle: the values the page opened with
 {
     if (capture_index >= 0) {
         capture_stop();
-        menu_page_rebuild_at(p, input_view == VIEW_KEYS_FIRST ? 0 : 0);
+        int row = input_view == VIEW_KEYS_FIRST ? capture_index : capture_index - 10;
+        menu_page_rebuild_at(p, row);
         return;
     }
     if (input_view == VIEW_KEYS_FIRST) { view_set(p, VIEW_PC, ROWS); return; }
