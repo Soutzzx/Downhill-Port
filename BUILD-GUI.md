@@ -40,7 +40,7 @@ termine-a antes de iniciar um novo build pela interface.
 
 ## Privacidade e direitos
 
-As ISOs, o ELF SCUS_971.77, os arquivos asm//assets/ e os objetos
+As ISOs, o ELF SCUS_971.77, os arquivos asm/ e assets/ e os objetos
 compilados são locais e ignorados pelo Git. **Não os envie nem adicione ao
 repositório.** A aplicação usa os scripts do repositório e nunca envia os dados
 do jogo. Na primeira execução, dependências e fontes da SDL3 podem ser baixadas
