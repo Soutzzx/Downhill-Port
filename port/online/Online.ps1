@@ -128,7 +128,8 @@ $join.Text = 'Join with a code'
 $track = Add-Control (New-List ($Tracks.GetEnumerator() | ForEach-Object { "$($_.Key)  $($_.Value)" }) 0) 140 195 280
 [void](Add-Label 'Start' 36 232)
 $players = Add-Control (New-List @('when I press START (or Enter)', 'when 2 players are in', 'when 3 players are in',
-        'when 4 players are in') 0) 140 229 280
+        'when 4 players are in', 'when 5 players are in', 'when 6 players are in',
+        'when 7 players are in', 'when 8 players are in') 0) 140 229 280
 
 [void](Add-Label 'Code' 36 268)
 $code = Add-Control (New-Object System.Windows.Forms.TextBox) 140 265 120
