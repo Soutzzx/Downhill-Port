@@ -2,7 +2,7 @@
 
    At start, unless dhd.ini says auto_update = off (DHD_AUTO_UPDATE):
    - it asks the update source (update_url, DHD_UPDATE_URL; empty: the GitHub releases API of
-     skuza-oss/downhill-revived) for the newest release, waiting at most CHECK_SECONDS. The
+     Soutzzx/Downhill-Port) for the newest release, waiting at most CHECK_SECONDS. The
      answer is either GitHub's release JSON, whose latest.json asset (or, without one, its
      DownhillRevived-*-win.zip asset and that asset's sha256 digest) names the zip, or a
      latest.json itself: {"version": "X.Y.Z", "url": the zip (may be relative to the
@@ -37,8 +37,8 @@
 #include <bcrypt.h>
 #pragma comment(lib, "bcrypt")
 
-#define OFFICIAL_UPDATE_URL "https://api.github.com/repos/skuza-oss/downhill-revived/releases/latest"
-#define RELEASES_PAGE "https://github.com/skuza-oss/downhill-revived/releases/latest"
+#define OFFICIAL_UPDATE_URL "https://api.github.com/repos/Soutzzx/Downhill-Port/releases/latest"
+#define RELEASES_PAGE "https://github.com/Soutzzx/Downhill-Port/releases/latest"
 #define TITLE "Downhill Revived"
 #define WIDE2(s) L##s
 #define WIDE(s) WIDE2(s)
