@@ -134,7 +134,7 @@ static void update_pads(void)
     for (int i = 0; i < 4; i++) {
         char name[96] = "";
         HostPad state;
-        int connected = gamepad_status(i, name, sizeof name, &state);
+        int connected = host_pad_status(i, name, sizeof name, &state);
         if (connected > 0)
             snprintf(pad_text[i], sizeof pad_text[i], "P%d: %.24s  BTN:%04X",
                      i + 1, name, state.buttons);
