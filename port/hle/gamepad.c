@@ -28,6 +28,7 @@ typedef struct {
     SDL_JoystickID id;           /* 0: free */
     SDL_Gamepad *gamepad;        /* or, without a mapping, */
     SDL_Joystick *joystick;
+    char name[96];           /* display only; snapshot copied under lock */
     int light, heavy;            /* vibration sent last */
     Uint64 sent;                 /* when (it is sent again before SDL's duration runs out) */
 } Slot;
@@ -119,7 +120,11 @@ static void attach(SDL_JoystickID id)
         name = SDL_GetJoystickName(s->joystick);
         how = "no mapping: default layout";
     }
+    EnterCriticalSection(&lock);
+    snprintf(s->name, sizeof s->name, "%s%s", name ? name : "Unknown controller",
+             s->joystick ? " (generic mapping)" : "");
     s->id = id;
+    LeaveCriticalSection(&lock);
     s->light = s->heavy = 0;
     if (s->gamepad) SDL_SetGamepadPlayerIndex(s->gamepad, i);
     SDL_PropertiesID props = s->gamepad ? SDL_GetGamepadProperties(s->gamepad) : SDL_GetJoystickProperties(s->joystick);
@@ -250,6 +255,23 @@ int gamepad_read(int player, HostPad *out)
     if (player < 0 || player >= SLOTS || !gamepad_start() || !present[player]) return 0;
     EnterCriticalSection(&lock);
     *out = latest[player];
+    LeaveCriticalSection(&lock);
+    return 1;
+}
+
+int gamepad_status(int player, char *name, size_t size, HostPad *state)
+{
+    if (name && size) name[0] = 0;
+    if (state) {
+        memset(state, 0, sizeof *state);
+        state->left_x = state->left_y = state->right_x = state->right_y = 128;
+    }
+    if (player < 0 || player >= SLOTS) return 0;
+    if (!gamepad_start()) return -1;
+    if (!present[player]) return 0;
+    EnterCriticalSection(&lock);
+    if (name && size) snprintf(name, size, "%s", slots[player].name);
+    if (state) *state = latest[player];
     LeaveCriticalSection(&lock);
     return 1;
 }
