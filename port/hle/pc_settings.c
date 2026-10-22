@@ -45,7 +45,7 @@ static const Choice fonts[] = {{"Original", "original"}, {"Sharp", "sharp"}};
 static const Choice rates[] = {{"60", "60"}, {"120", "120"}, {"144", "144"}, {"Monitor", "monitor"}};
 
 #define CHOICES(c) c, (int)(sizeof c / sizeof *c)
-enum { RESOLUTION, DISPLAY, SIZE, SHAPE, SCALING, WIDESCREEN, MOVIES, VIBRATION, TEXTURES, FONT };
+enum { RESOLUTION, DISPLAY, WINDOW_SIZE, SHAPE, SCALING, WIDESCREEN, MOVIES, VIBRATION, TEXTURES, FONT };
 static Row rows[ROWS] = {
     {"Resolution:", "scale", "DHD_SCALE", "2", CHOICES(scales), 0},
     {"Display:", "window", "DHD_WINDOW", "windowed", CHOICES(displays), 1},
@@ -131,7 +131,7 @@ static void update_bindings(void)
 /* The value the program runs with now: the variable (set from dhd.ini or the environment). */
 static void current(const Row *r, char *out, size_t size)
 {
-    if (r == &rows[SIZE]) {
+    if (r == &rows[WINDOW_SIZE]) {
         const char *w = getenv("DHD_WINDOW_WIDTH"), *h = getenv("DHD_WINDOW_HEIGHT");
         snprintf(out, size, "%dx%d", w && atoi(w) > 0 ? atoi(w) : 896, h && atoi(h) > 0 ? atoi(h) : 672);
         return;
@@ -156,7 +156,7 @@ static int find(const Row *r, const char *value)
 
 static int locked(const Row *r)
 {
-    return host_setting_locked(r->env) || (r == &rows[SIZE] && host_setting_locked("DHD_WINDOW_HEIGHT"));
+    return host_setting_locked(r->env) || (r == &rows[WINDOW_SIZE] && host_setting_locked("DHD_WINDOW_HEIGHT"));
 }
 
 static void format(Row *r)
@@ -172,7 +172,7 @@ static void format(Row *r)
 static void commit(Row *r, int apply)
 {
     const Choice *c = &r->choices[r->selected];
-    if (r == &rows[SIZE]) {
+    if (r == &rows[WINDOW_SIZE]) {
         char w[16], h[16];
         sscanf(c->value, "%15[0-9]x%15[0-9]", w, h);
         host_setting_save("width", w);
@@ -184,7 +184,7 @@ static void commit(Row *r, int apply)
     }
     if (!apply) return;
     r->running = r->selected;
-    if (r == &rows[DISPLAY] || r == &rows[SIZE]) gs_window_apply();
+    if (r == &rows[DISPLAY] || r == &rows[WINDOW_SIZE]) gs_window_apply();
     else if (r == &rows[SHAPE] || r == &rows[SCALING]) gs_present_options_apply();
     else if (r == &rows[VIBRATION]) host_pad_vibrate(0, 0, 0);
 }
@@ -265,7 +265,7 @@ static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
     const Row *r = cursor >= 0 && cursor < ROWS ? &rows[cursor] : NULL;
     p->footer = NULL;
     if (r && locked(r)) {
-        snprintf(footer, sizeof footer, "Set by %s outside the game", r == &rows[SIZE] ? "DHD_WINDOW_WIDTH" : r->env);
+        snprintf(footer, sizeof footer, "Set by %s outside the game", r == &rows[WINDOW_SIZE] ? "DHD_WINDOW_WIDTH" : r->env);
         p->footer = footer;
     } else if (r && r->selected != r->running) p->footer = "* Applies when the game starts again";
     else if (r == &rows[TEXTURES] && !texpack_available()) p->footer = "No pack: see texture_pack in dhd.ini";
