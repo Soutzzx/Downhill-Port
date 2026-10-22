@@ -77,12 +77,17 @@ function Install-Native-Release {
         if (-not (Test-Path -LiteralPath (Join-Path $src 'dhd.exe') -PathType Leaf)) {
             throw 'A release nao tem dhd.exe no diretorio esperado.'
         }
-        foreach ($name in @('dhd.exe', 'README.txt', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt')) {
+        # Stage the executable before the final rename, so a cancelled download
+        # cannot leave a partial dhd.exe that the next run would attempt to start.
+        $stagedExe = Join-Path $target 'dhd.exe.new'
+        Copy-Item -LiteralPath (Join-Path $src 'dhd.exe') -Destination $stagedExe -Force
+        foreach ($name in @('README.txt', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt')) {
             $from = Join-Path $src $name
             if (Test-Path -LiteralPath $from -PathType Leaf) {
                 Copy-Item -LiteralPath $from -Destination (Join-Path $target $name) -Force
             }
         }
+        Move-Item -LiteralPath $stagedExe -Destination $exe -Force
         Write-Host "Instalado em $target"
     } finally {
         if (Test-Path -LiteralPath $temp) {
