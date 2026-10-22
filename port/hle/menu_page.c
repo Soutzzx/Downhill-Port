@@ -77,7 +77,8 @@ static void slot_build(void *menu)  /* slot 1, as func_0015F0C8 */
     int half = width >> 1;
     Item *title = &MENU(p, X_TITLE, Item), *foot = &MENU(p, X_FOOTER, Item);
     MENU(p, X_ROW_Y, int) = 0x54;
-    MENU(p, X_ROW_STEP, int) = 10;
+    /* PC SETTINGS now includes a controls entry: fit twelve rows above the footer. */
+    MENU(p, X_ROW_STEP, int) = p->title && !strcmp(p->title, "PC SETTINGS") ? 9 : 10;
     MENU(p, X_ROW_X, int) = half - 0x88;
     title->x = (short)half; title->y = 0x40; title->placed = 1;
     foot->x = (short)half; foot->y = 0xCC; foot->placed = 1;
