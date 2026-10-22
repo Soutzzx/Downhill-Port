@@ -19,7 +19,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parent
 CLEAN = ROOT / "build" / "port" / "clean"
 ISO_DIR = ROOT / "iso"
 EXPECTED_SHA1 = "4e25a222ad8a475b5d26c2e928e90b5f2b7075eb"
