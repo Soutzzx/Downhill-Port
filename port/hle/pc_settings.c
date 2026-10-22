@@ -13,6 +13,7 @@
 #include "menu_page.h"
 
 #include <stdio.h>
+#include <windows.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -61,7 +62,71 @@ static Row rows[ROWS] = {
 
 static MenuPage page;
 static int loaded;
-static char footer[64];
+static char footer[128];
+/* An in-game controls page, reusing the PC SETTINGS popup and its menu instance.
+   No nested modal menu: the original page changes its rows when switching views. */
+enum { VIEW_PC, VIEW_KEYS_FIRST, VIEW_KEYS_MORE };
+static int input_view;
+static int capture_index = -1, capture_phase;
+static char bind_text[19][72];
+static const char *const key_next = "More key bindings ->";
+static const char *const key_back = "Back to PC settings";
+static const char *const key_restore = "Restore default keys";
+
+static void save_bindings(void)
+{
+    for (int i = 0; i < keyboard_bind_count(); i++) {
+        char key[24], value[16];
+        snprintf(key, sizeof key, "bind_%02d", i);
+        snprintf(value, sizeof value, "%d", keyboard_bind_key(i));
+        if (!host_setting_save(key, value))
+            hle_log("bindings: failed to save %s\n", key);
+    }
+}
+static int game_focused(void)
+{
+    HWND foreground = GetForegroundWindow();
+    DWORD process = 0;
+    if (foreground) GetWindowThreadProcessId(foreground, &process);
+    return process == GetCurrentProcessId();
+}
+static int capture_down(void)
+{
+    if (!game_focused()) return 0;
+    for (int vk = 8; vk < 255; vk++)
+        if ((keyboard_bind_valid(vk) || vk == VK_ESCAPE) && (GetAsyncKeyState(vk) & 0x8000))
+            return vk;
+    return 0;
+}
+static void capture_stop(void)
+{
+    capture_index = -1;
+    capture_phase = 0;
+    keyboard_bind_capture(0);
+}
+static void view_set(MenuPage *p, int view, int cursor)
+{
+    capture_stop();
+    input_view = view;
+    p->title = view == VIEW_PC ? "PC SETTINGS" : "KEY BINDINGS";
+    menu_page_rebuild_at(p, cursor);
+}
+static void start_capture(MenuPage *p, int index)
+{
+    if (index < 0 || index >= keyboard_bind_count() || index == 8) return;
+    capture_index = index;
+    capture_phase = 0; /* wait for menu's confirm key to be released */
+    keyboard_bind_capture(1); /* prevent the typed key acting inside the game */
+    p->footer = "Release keys, then press a key (ESC cancels)";
+}
+static void update_bindings(void)
+{
+    for (int i = 0; i < keyboard_bind_count(); i++)
+        snprintf(bind_text[i], sizeof bind_text[i], "%-18.18s %s%s",
+                 keyboard_bind_action(i), keyboard_bind_name(keyboard_bind_key(i)),
+                 i == 8 ? " (fixed)" : capture_index == i ? " < PRESS KEY >" : "");
+}
+
 
 /* The value the program runs with now: the variable (set from dhd.ini or the environment). */
 static void current(const Row *r, char *out, size_t size)
@@ -147,14 +212,56 @@ static void change(int index, int step)
 
 static void page_build(MenuPage *p)
 {
-    for (int i = 0; i < ROWS; i++) {
-        format(&rows[i]);
-        menu_page_row(p, rows[i].text, 1);
+    if (input_view == VIEW_KEYS_FIRST) {
+        update_bindings();
+        for (int i = 0; i < 10; i++) menu_page_row(p, bind_text[i], i != 8);
+        menu_page_row(p, key_next, 1);
+        menu_page_row(p, key_back, 1);
+    } else if (input_view == VIEW_KEYS_MORE) {
+        update_bindings();
+        for (int i = 10; i < keyboard_bind_count(); i++) menu_page_row(p, bind_text[i], 1);
+        menu_page_row(p, key_restore, 1);
+        menu_page_row(p, "Previous key bindings <-", 1);
+    } else {
+        for (int i = 0; i < ROWS; i++) {
+            format(&rows[i]);
+            menu_page_row(p, rows[i].text, 1);
+        }
+        menu_page_row(p, "KEYBOARD BINDINGS  >", 1);
     }
 }
 
 static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
 {
+    if (input_view == VIEW_KEYS_FIRST || input_view == VIEW_KEYS_MORE) {
+        if (capture_index >= 0) {
+            int key = capture_down();
+            if (capture_phase == 0) {
+                if (!key) capture_phase = 1;
+            } else if (capture_phase == 1 && key) {
+                if (key != VK_ESCAPE && keyboard_bind_set(capture_index, key))
+                    save_bindings();
+                capture_phase = 2;
+                update_bindings();
+            } else if (capture_phase == 2 && !key) {
+                int old = capture_index;
+                capture_stop();
+                menu_page_rebuild_at(p, old < 10 ? old : old - 10);
+            }
+            p->footer = capture_phase == 0 ? "Release keys first" :
+                        capture_phase == 1 ? "Press new key; ESC to cancel" : "Release key...";
+        } else {
+            p->footer = input_view == VIEW_KEYS_MORE && cursor == 9
+                        ? "Reset keyboard bindings to defaults"
+                        : "CROSS: change key, TRIANGLE: back";
+        }
+        update_bindings();
+        return;
+    }
+    if (cursor == ROWS) {
+        p->footer = "CROSS: remap keyboard keys";
+        return;
+    }
     const Row *r = cursor >= 0 && cursor < ROWS ? &rows[cursor] : NULL;
     p->footer = NULL;
     if (r && locked(r)) {
@@ -166,6 +273,14 @@ static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
 
 static void page_back(MenuPage *p)  /* Triangle: the values the page opened with, close */
 {
+    if (capture_index >= 0) {
+        int row = input_view == VIEW_KEYS_FIRST ? capture_index : capture_index - 10;
+        capture_stop();
+        menu_page_rebuild_at(p, row);
+        return;
+    }
+    if (input_view == VIEW_KEYS_FIRST) { view_set(p, VIEW_PC, ROWS); return; }
+    if (input_view == VIEW_KEYS_MORE) { view_set(p, VIEW_KEYS_FIRST, 10); return; }
     for (int i = 0; i < ROWS; i++) {
         Row *r = &rows[i];
         if (r->selected == r->opened || r->opened < 0) continue;
@@ -175,16 +290,37 @@ static void page_back(MenuPage *p)  /* Triangle: the values the page opened with
     menu_page_cancel(p);
 }
 
-static void page_left(MenuPage *p, int index) { (void)p; change(index, -1); }
-static void page_right(MenuPage *p, int index) { (void)p; change(index, 1); }
+static void page_left(MenuPage *p, int index) { (void)p; if (input_view == VIEW_PC) change(index, -1); }
+static void page_right(MenuPage *p, int index) { (void)p; if (input_view == VIEW_PC) change(index, 1); }
+static void page_accept(MenuPage *p, int index)
+{
+    if (capture_index >= 0) return;
+    if (input_view == VIEW_PC) {
+        if (index == ROWS) view_set(p, VIEW_KEYS_FIRST, 0);
+        else menu_page_close(p);
+    } else if (input_view == VIEW_KEYS_FIRST) {
+        if (index < 10) start_capture(p, index);
+        else if (index == 10) view_set(p, VIEW_KEYS_MORE, 0);
+        else view_set(p, VIEW_PC, ROWS);
+    } else if (input_view == VIEW_KEYS_MORE) {
+        if (index < 9) start_capture(p, index + 10);
+        else if (index == 9) {
+            keyboard_bind_defaults();
+            save_bindings();
+            menu_page_rebuild_at(p, 9);
+        } else view_set(p, VIEW_KEYS_FIRST, 10);
+    }
+}
 
 /* OPTIONS, item 9 (patched func_001F0160): run the page until it closes. */
 void port_pc_settings(void)
 {
+    capture_stop();
+    input_view = VIEW_PC;
     page.title = "PC SETTINGS";
     page.build = page_build;
     page.update = page_update;
-    page.accept = NULL;  /* Cross: keep, close */
+    page.accept = page_accept; /* Cross enters controls, otherwise retains settings */
     page.back = page_back;
     page.left = page_left;
     page.right = page_right;

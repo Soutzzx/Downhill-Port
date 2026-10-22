@@ -51,7 +51,7 @@ typedef struct {
     int8_t dir;             /* -1 left/up, 1 right/down */
 } Key;
 
-static const Key keys[] = {
+static Key keys[] = {
     {VK_LEFT_, PAD_LEFT, 0, LEFT_X, -1},   {VK_RIGHT_, PAD_RIGHT, 0, LEFT_X, 1},
     {VK_UP_, PAD_UP, 0, LEFT_Y, -1},       {VK_DOWN_, PAD_DOWN, 0, LEFT_Y, 1},
     {VK_SPACE_, PAD_CROSS, PAD_CROSS},     {'X', PAD_CROSS, PAD_CROSS},
@@ -64,6 +64,97 @@ static const Key keys[] = {
     {'F', PAD_L3, PAD_L3},
 };
 enum { KEYS = sizeof keys / sizeof *keys };
+/* Key numbers are intentionally stable: bind_00 ... bind_18 in dhd.ini.
+   The escape key remains fixed, so the menu always has a way to cancel. */
+static const uint8_t defaults[] = {
+    VK_LEFT_, VK_RIGHT_, VK_UP_, VK_DOWN_, VK_SPACE_, 'X', 'S', VK_BACK_, VK_ESCAPE_,
+    VK_RETURN_, VK_TAB_, 'Z', 'C', 'A', 'D', 'Q', 'E', 'W', 'F'
+};
+static const char *const actions[] = {
+    "Steer left", "Steer right", "Lean forward", "Lean back",
+    "Pedal / confirm", "Pedal (alt)", "Brake / back", "Brake (alt)",
+    "Pause / back", "Start / pause", "Camera / select", "Punch",
+    "Kick", "Trick L1", "Trick R1", "Trick L2", "Trick R2",
+    "Sprint", "Powerslide"
+};
+static int suppress_keys;
+void keyboard_reset(void); /* used by binding setters below */
+
+int keyboard_bind_count(void) { return KEYS; }
+int keyboard_bind_key(int index) { return index >= 0 && index < KEYS ? keys[index].key : 0; }
+const char *keyboard_bind_action(int index)
+{
+    return index >= 0 && index < KEYS ? actions[index] : "";
+}
+int keyboard_bind_valid(int key)
+{
+    if (key < 8 || key >= 255) return 0;
+    switch (key) {
+    case VK_ESCAPE_: case 0x10: case 0x11: case 0x12: /* shift / ctrl / alt */
+    case 0x5B: case 0x5C: case 0x14: case 0x90: /* Win / caps / num lock */
+    case 0x01: case 0x02: case 0x04: /* mouse buttons */
+        return 0;
+    }
+    return 1;
+}
+/* A duplicate binding swaps the other action, rather than activating both
+   actions when the player presses a single key. */
+int keyboard_bind_load(int index, int key)
+{
+    if (index < 0 || index >= KEYS || index == 8 || !keyboard_bind_valid(key)) return 0;
+    keys[index].key = (uint8_t)key;
+    keyboard_reset();
+    return 1;
+}
+int keyboard_bind_set(int index, int key)
+{
+    if (index < 0 || index >= KEYS || index == 8 || !keyboard_bind_valid(key))
+        return 0;
+    int old = keys[index].key;
+    if (old == key) return 1;
+    for (int i = 0; i < KEYS; i++)
+        if (i != index && keys[i].key == key) {
+            if (i == 8) return 0;
+            keys[i].key = (uint8_t)old;
+            break;
+        }
+    keys[index].key = (uint8_t)key;
+    keyboard_reset();
+    return 1;
+}
+void keyboard_bind_defaults(void)
+{
+    for (int i = 0; i < KEYS; i++) keys[i].key = defaults[i];
+    keyboard_reset();
+}
+void keyboard_bind_capture(int active)
+{
+    suppress_keys = !!active;
+    keyboard_reset();
+}
+int keyboard_bind_suppressed(void) { return suppress_keys; }
+const char *keyboard_bind_name(int key)
+{
+    static char names[8][24];
+    static unsigned slot;
+    char *out = names[(slot++) & 7];
+    switch (key) {
+    case VK_LEFT_: return "LEFT"; case VK_RIGHT_: return "RIGHT";
+    case VK_UP_: return "UP"; case VK_DOWN_: return "DOWN";
+    case VK_SPACE_: return "SPACE"; case VK_BACK_: return "BACKSPACE";
+    case VK_ESCAPE_: return "ESC"; case VK_RETURN_: return "ENTER";
+    case VK_TAB_: return "TAB";
+    case 0x2E: return "DELETE"; case 0x2D: return "INSERT";
+    case 0x24: return "HOME"; case 0x23: return "END";
+    case 0x21: return "PAGE UP"; case 0x22: return "PAGE DOWN";
+    }
+    if (key >= 'A' && key <= 'Z') { snprintf(out, 24, "%c", key); return out; }
+    if (key >= '0' && key <= '9') { snprintf(out, 24, "%c", key); return out; }
+    if (key >= 0x70 && key <= 0x87) { snprintf(out, 24, "F%d", key - 0x6F); return out; }
+    snprintf(out, 24, "VK %d", key);
+    return out;
+}
+
 
 #define RAMP_SECONDS 0.1
 #define FIELD_SECONDS (port_fps_high() ? port_frame_period() : 1.0 / 60)
@@ -131,6 +222,7 @@ void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
                                                 PAD_CROSS, PAD_SQUARE, PAD_L1, PAD_R1, PAD_L2, PAD_R2};
     uint16_t buttons = 0;
     int dir[3] = {0};
+    if (suppress_keys) { keyboard_reset(); return; }
     for (int i = 0; i < KEYS; i++) {
         const Key *k = &keys[i];
         if (!down[k->key]) {
