@@ -31,7 +31,7 @@ static const struct { int index; const char *name; } riders[] = {
 
 static const char code_letters[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  /* the server's join codes */
 static const char name_letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
-enum { NAME_MAX = 12, CODE_LENGTH = 6, ROW_TEXT = 96, MAX_ROWS = 12, LIST_MAX = 8, MEMBER_ROWS = 4 };
+enum { NAME_MAX = 12, CODE_LENGTH = 6, ROW_TEXT = 96, MAX_ROWS = 16, LIST_MAX = 8, MEMBER_ROWS = NET_MAX_SLOTS };
 
 enum { HOME, LIST, NAME, CODE, ROOM };
 /* The room's rows */
@@ -461,7 +461,7 @@ static void room_update(MenuPage *p, NetLobby *l)
     if (in && l->is_host && !room_settings_sent) {
         char room_name[40];
         snprintf(room_name, sizeof room_name, "%s", name);
-        NetRoomSettings s = {tracks[room_track].index, room_options, public_room, 4, -1, room_name};
+        NetRoomSettings s = {tracks[room_track].index, room_options, public_room, NET_MAX_SLOTS, -1, room_name};
         net_set_room(&s);
         room_settings_sent = 1;
     }
@@ -521,7 +521,7 @@ static void room_update(MenuPage *p, NetLobby *l)
     }
     snprintf(text[R_SELECT], ROW_TEXT, "%s", selected ? "Change Rider / Bike / Outfit" : "Choose Rider / Bike / Outfit");
     for (int i = 0; i < MEMBER_ROWS; i++) {
-        const NetMember *m = &l->member[i];
+        const NetMember *m = i < l->nmembers ? &l->member[i] : NULL;
         char who[24], ping[16] = "";
         if (!in || i >= l->nmembers) {
             text[R_MEMBER + i][0] = 0;
