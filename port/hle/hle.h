@@ -83,7 +83,7 @@ typedef struct {
 void host_pad_read(int port, HostPad *out);  /* a script if one is set, else the controller */
 int host_pad_script(int player, HostPad *out);  /* DHD_NAV / DHD_AUTOPAD / DHD_RACE_PAD; 0 if none */
 void host_pad_device(int port, HostPad *out);   /* the controller, and for port 0 the keyboard too */
-int host_pad_status(int port, char *name, size_t size, HostPad *state); /* device-only diagnostics */
+
 
 /* keyboard.c: keys (Windows virtual-key codes, down[key] != 0) as a pad, merged into `out`;
    `riding`: the game's riding controls are on (D_0029E290), the arrows move the left stick. */
@@ -97,6 +97,7 @@ int keyboard_bind_key(int index);
 const char *keyboard_bind_action(int index);
 const char *keyboard_bind_name(int key);
 int keyboard_bind_valid(int key);
+int keyboard_bind_load(int index, int key);
 int keyboard_bind_set(int index, int key);
 void keyboard_bind_defaults(void);
 void keyboard_bind_capture(int active);
@@ -109,7 +110,7 @@ int gamepad_read(int player, HostPad *out);  /* 0: no controller for that player
 void gamepad_vibrate(int player, int light, int heavy);
 /* -1: SDL unavailable, 0: slot empty, 1: connected. status contains a
    snapshot of raw controller input before the keyboard is merged. */
-int gamepad_status(int player, char *name, size_t size, HostPad *status);
+
 
 /* ---- kernel.c ---- */
 enum { INTC_GS = 0, INTC_VBLANK_START = 2, INTC_VBLANK_END = 3, INTC_TIMER0 = 9 };
