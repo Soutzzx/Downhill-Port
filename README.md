@@ -67,6 +67,19 @@ Known gaps:
   people on four PCs.
 - The game has only been tested on a few PCs. Please report problems.
 
+## Jogar sem compilar (Windows)
+
+Quem baixar este fork pode abrir **Play-Downhill.cmd** na raiz do projeto.
+Na primeira execução, o launcher baixa e confere a versão portátil mais recente
+publicada em [Releases](../../releases), e o jogo pede para selecionar a ISO USA
+(SCUS-97177) do próprio jogador. Depois, o caminho da ISO e os saves ficam
+na pasta local **play/**, que não é enviada ao GitHub.
+
+**O mantenedor precisa publicar primeiro** uma release com o ZIP nativo e
+latest.json; só o código-fonte no Git não contém dhd.exe. Veja
+[PORTABLE.md](PORTABLE.md) para o fluxo completo de publicação e de uso.
+As ISOs e os recursos extraídos do jogo continuam excluídos do Git.
+
 ## Playing
 
 1. Download `DownhillRevived-<version>-win.zip` from the [Releases](../../releases) page and
