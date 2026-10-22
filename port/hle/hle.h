@@ -91,12 +91,24 @@ const uint8_t *keyboard_keys(int *count);  /* the keys it reads */
 void keyboard_reset(void);
 int keyboard_game_axis(int raw);           /* the game's reading of a stick byte (-127..127) */
 int keyboard_script(const char *script, double seconds, uint8_t down[256]);  /* DHD_KEYS */
+int keyboard_bind_count(void);
+int keyboard_bind_key(int index);
+const char *keyboard_bind_action(int index);
+const char *keyboard_bind_name(int key);
+int keyboard_bind_valid(int key);
+int keyboard_bind_set(int index, int key);
+void keyboard_bind_defaults(void);
+void keyboard_bind_capture(int active);
+int keyboard_bind_suppressed(void);
 
 /* gamepad.c: controllers through SDL3 (XInput, DirectInput, HID: DualSense, DualShock 4, Switch
    Pro and the generic pads in SDL's mapping database). gamepad_start: 1 if SDL is running. */
 int gamepad_start(void);
 int gamepad_read(int player, HostPad *out);  /* 0: no controller for that player */
 void gamepad_vibrate(int player, int light, int heavy);
+/* -1: SDL unavailable, 0: slot empty, 1: connected. status contains a
+   snapshot of raw controller input before the keyboard is merged. */
+int gamepad_status(int player, char *name, size_t size, HostPad *status);
 
 /* ---- kernel.c ---- */
 enum { INTC_GS = 0, INTC_VBLANK_START = 2, INTC_VBLANK_END = 3, INTC_TIMER0 = 9 };
