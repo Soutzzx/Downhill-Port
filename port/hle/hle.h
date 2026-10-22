@@ -83,6 +83,7 @@ typedef struct {
 void host_pad_read(int port, HostPad *out);  /* a script if one is set, else the controller */
 int host_pad_script(int player, HostPad *out);  /* DHD_NAV / DHD_AUTOPAD / DHD_RACE_PAD; 0 if none */
 void host_pad_device(int port, HostPad *out);   /* the controller, and for port 0 the keyboard too */
+int host_pad_status(int port, char *name, size_t size, HostPad *state); /* device-only diagnostics */
 
 /* keyboard.c: keys (Windows virtual-key codes, down[key] != 0) as a pad, merged into `out`;
    `riding`: the game's riding controls are on (D_0029E290), the arrows move the left stick. */
