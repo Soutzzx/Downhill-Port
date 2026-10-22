@@ -294,7 +294,7 @@ static struct {
     int gone[NET_MAX_SLOTS];
     double go_at;               /* EVENT_START: server ms of the countdown's start, 0 until known */
     double go_server;           /* our GO on the server's clock */
-    double their_go[4];         /* the others' */
+    double their_go[NET_MAX_SLOTS]; /* GO clock of each possible online racer */
     int go_sent;
     int last_sent;              /* race clock of the last snapshot sent */
     unsigned sent, received;
@@ -457,7 +457,7 @@ static void barrier(void)
             if (!ready_sent) fprintf(stderr, "online: room %s%s\n", lobby.code, lobby.is_host ? " (host)" : "");
             if (lobby.is_host && !settings_sent) {
                 const char *track = getenv("DHD_NET_TRACK"), *room = getenv("DHD_NET_ROOM_NAME");
-                NetRoomSettings s = {track && *track ? atoi(track) : 0, -1, getenv("DHD_NET_PUBLIC") != NULL, 4, -1,
+                NetRoomSettings s = {track && *track ? atoi(track) : 0, -1, getenv("DHD_NET_PUBLIC") != NULL, NET_MAX_SLOTS, -1,
                                      room && *room ? room : NULL};
                 net_set_room(&s);
                 settings_sent = 1;
@@ -507,7 +507,7 @@ static void barrier(void)
         Sleep(10);
     }
     kernel_pace_slip(host_wall_seconds() - entered);  /* the lobby wait isn't game time to catch up */
-    on.nslots = lobby.nslots < 2 ? 2 : lobby.nslots > 4 ? 4 : lobby.nslots;
+    on.nslots = lobby.nslots < 2 ? 2 : lobby.nslots > NET_MAX_SLOTS ? NET_MAX_SLOTS : lobby.nslots;
     on.local_slot = lobby.local_slot;
     on.host_slot = 0;
     for (int i = 0; i < lobby.nslots; i++)
@@ -592,8 +592,8 @@ static void receive_frames(void)
             break;
         case EVENT_GO:
             if (n - 2 >= 10) {
-                memcpy(&on.their_go[sender & 3], e + 2, 8);
-                if (on.go_server) go_skew(sender & 3);
+                memcpy(&on.their_go[sender], e + 2, 8);
+                if (on.go_server) go_skew(sender);
             }
             break;
         case EVENT_FINISH:
@@ -896,7 +896,7 @@ static void state_sync(void)
         memcpy(e + 2, &on.go_server, 8);
         send_event(e, sizeof e);
         on.go_sent = 1;
-        for (int j = 0; j < 4; j++)
+        for (int j = 0; j < on.nslots; j++)
             if (on.their_go[j]) go_skew(j);
     }
     static int checked;
