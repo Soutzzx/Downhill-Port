@@ -21,6 +21,9 @@ asm/
 assets/
 expected/
 
+# Portable player installation: downloaded binary, user settings and saves stay local.
+/play/
+
 # --- Build outputs ---------------------------------------------------------------------
 build/
 build-try/

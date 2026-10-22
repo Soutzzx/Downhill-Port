@@ -46,7 +46,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / 'port' / 'release'
 VERSION_H = ROOT / 'port' / 'include' / 'version.h'
 # Where players get releases: latest.json names the zip as an asset of the release v<version>.
-RELEASES = 'https://github.com/skuza-oss/downhill-revived/releases'
+RELEASES = 'https://github.com/Soutzzx/Downhill-Port/releases'
 
 
 def header_version():
