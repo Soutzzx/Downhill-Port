@@ -214,7 +214,7 @@ static void page_build(MenuPage *p)
 {
     if (input_view == VIEW_KEYS_FIRST) {
         update_bindings();
-        for (int i = 0; i < 10; i++) menu_page_row(p, bind_text[i], 1);
+        for (int i = 0; i < 10; i++) menu_page_row(p, bind_text[i], i != 8);
         menu_page_row(p, key_next, 1);
         menu_page_row(p, key_back, 1);
     } else if (input_view == VIEW_KEYS_MORE) {
