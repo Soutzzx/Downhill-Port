@@ -110,7 +110,8 @@ int net_create_room(void)
 int net_find_player_host(const char *code, char *url, size_t capacity)
 {
     char request[350], body[512], resolved[192];
-    const char *registry = getenv("DHD_NET_SERVER");
+    const char *registry = getenv("DHD_HOST_DIRECTORY");
+    if (!registry || !*registry) registry = getenv("DHD_NET_SERVER");
     if (!url || capacity == 0) return 0;
     url[0] = 0;
     if (!registry || !*registry || !code || strlen(code) != 6) return 0;
