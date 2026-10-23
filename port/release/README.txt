@@ -122,9 +122,12 @@ The game now starts the local server automatically, invisibly, then opens the
 Race Room. Give friends the six-character code; they still use Join With A Code.
 The local server closes automatically when you leave the hosted game or close
 dhd.exe. No CMD or PowerShell window needs to stay open manually.
-Hosting REQUIRES Node.js 22+ and the project's online/player-host.ps1 and
-online/server/ files in the release folder; just copying dhd.exe by itself is
-not sufficient for the host. Technical log: %%TEMP%%\dhd-player-host.log.
+The first hosted game automatically installs a verified portable Node.js LTS
+runtime if needed and installs the local relay dependencies. An internet
+connection is required for this first setup. The release must include
+online/player-host.ps1 and online/server/ beside dhd.exe (build_clean.py
+copies them automatically); copying just dhd.exe is only sufficient for
+single-player or joining, not hosting. Log: %TEMP%\dhd-player-host.log.
 Internet hosting also requires a reachable TCP port 8787 and a deployed room
 code directory; CGNAT may require a public IP or tunnel. Only the host needs
 the local server runtime; other players use Join With A Code normally.
