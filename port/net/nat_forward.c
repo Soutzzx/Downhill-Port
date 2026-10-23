@@ -10,6 +10,7 @@
 #include <oleauto.h>
 #include <natupnp.h>
 #include <stdio.h>
+#include <string.h>
 #include "nat_forward.h"
 
 enum { FORWARD_PORT = 8787 };
