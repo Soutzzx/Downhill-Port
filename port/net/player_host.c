@@ -107,6 +107,15 @@ int player_host_start(void)
         player_host_state() == PLAYER_HOST_READY) return 1;
     player_host_stop();
 
+    /* Do not attach to somebody else's already running PlayerHost.cmd:
+       we could not close that independently owned process on leaving. */
+    char existing[256];
+    if (http_get("http://127.0.0.1:8787/v1/health", existing, sizeof existing) > 0 &&
+        strstr(existing, "\"ok\"") && strstr(existing, "\"protocol\"")) {
+        set_error("Close the manually opened PlayerHost.cmd first.");
+        return 0;
+    }
+
     wchar_t script[2048], cmd[4096], logfile[2048], tempdir[1800];
     if (!find_host_script(script, sizeof script / sizeof *script)) {
         set_error("Missing online/server beside the game (or in a parent folder).");
