@@ -19,6 +19,17 @@ How to play
    moves or changes.
 
 Controls
+Keyboard bindings are split by context in OPTIONS > PC SETTINGS >
+KEYBOARD BINDINGS: MENU BINDINGS (navigation, confirm, back) and GAMEPLAY
+BINDINGS (steering, pedal, brake, tricks, pause). The same key can have a menu
+and a race action without conflict. Esc always backs out of menus. Settings
+are saved to dhd.ini. The controller input is unchanged.
+
+The mouse operates in MENUS ONLY: wheel navigates; left click confirms
+the currently selected item; right click goes back. In PC SETTINGS and the
+other native popups, hover a row to select it directly. The original game
+menus still use wheel + click. Mouse input does not control the race.
+
 A controller works out of the box: Xbox pads, DualSense, DualShock 4, Switch Pro, 8BitDo and most
 other USB or Bluetooth pads (through SDL3 and its controller database), with vibration where the
 pad has motors. The buttons go by position, as on a PlayStation pad: bottom = Cross, right =
