@@ -347,23 +347,25 @@ static void enter_room(int create, const char *code)
         snprintf(status, sizeof status, "%s", why);
         return;
     }
-    /* Join With A Code automatically detects player-hosted rooms through
-       the public rendezvous. Unknown codes use the existing Cloudflare
-       server, so old private rooms keep working unchanged. */
+    /* H-prefixed codes ALWAYS target Player Hosted and are NEVER routed
+       to the Cloudflare race relay. The public server remains available
+       through its own Create/Join options and regular room codes. */
     if (!create && !hosted_mode) {
         char direct[192];
-        int is_host_code = code && strlen(code) == CODE_LENGTH && code[0] == 'H';
-        host_code_direct = net_find_player_host(code, direct, sizeof direct);
+        int is_host_code = code && strlen(code) == CODE_LENGTH &&
+                           (code[0] == 'H' || code[0] == 'h');
+        host_code_direct = is_host_code &&
+                           net_find_player_host(code, direct, sizeof direct);
         host_code_unresolved = is_host_code && !host_code_direct;
         if (host_code_direct) {
             net_init(direct, name, version, iso_hash);
-            hle_log("online menu: resolved Player Hosted code %s to %s\n", code, direct);
+            hle_log("online menu: joining native Player Hosted room %s via %s\n", code, direct);
+        } else if (host_code_unresolved) {
+            snprintf(status, sizeof status, "Host code not online. Check host / directory");
+            hle_log("online menu: native H-code %s is not registered; no cloud fallback\n", code);
+            return;
         } else {
-            /* Keep Cloudflare codes starting with H valid, too. Only after
-               a room_not_found error can we know this was not a cloud room. */
             net_init(server(), name, version, iso_hash);
-            if (host_code_unresolved)
-                hle_log("online menu: H-code not found in local/public directory (%s)\n", code);
         }
     } else {
         host_code_unresolved = host_code_direct = 0;
@@ -467,9 +469,7 @@ static void room_update(MenuPage *p, NetLobby *l)
         if (too_old) outdated = 1;
         snprintf(status, sizeof status, "%s",
                  too_old ? outdated_text : l->error[0] ? l->error : "The connection to the server failed");
-        if (host_code_unresolved && !strcmp(l->error_code, "room_not_found"))
-            snprintf(status, sizeof status, "Host code offline: check directory / host PC");
-        else if (host_code_direct && !too_old)
+        if (host_code_direct && !too_old && !l->error_code[0])
             snprintf(status, sizeof status, "Cannot reach host: check TCP 8787 / firewall");
         hle_log("online menu: refused: %s (%s)\n", l->error, l->error_code);
         net_leave();
@@ -579,12 +579,16 @@ static void room_update(MenuPage *p, NetLobby *l)
     }
     /* what to do next, else what everyone waits for */
     if (status[0]) p->footer = status;
+    else if (hosted_mode && in && player_host_directory_state() < 0)
+        p->footer = "H-code not registered: remote join unavailable";
+    else if (hosted_mode && in && !player_host_directory_state())
+        p->footer = "H-code registering; LAN/local joining works";
     else if (!in) p->footer = "No connection: Leave Room to give up";
     else if (conflict) p->footer = "Rider taken: change your selection";
     else if (!selected) p->footer = "Choose your rider, bike and outfit first";
     else if (l->nmembers < 2) {
         if (hosted_mode)
-            snprintf(footer, sizeof footer, "Waiting for friends - TCP 8787 must be reachable");
+            snprintf(footer, sizeof footer, "Host: TCP 8787 must be reachable remotely");
         else
             snprintf(footer, sizeof footer, "Waiting for players: friends join with code %s", l->code);
         p->footer = footer;
@@ -629,7 +633,7 @@ static void page_update(MenuPage *p, int cursor)
     switch (screen) {
     case HOME:
         if (!status[0] && cursor == HOME_HOST)
-            p->footer = "Direct hosting: TCP 8787 + public code directory";
+            p->footer = "Private native host (no Cloudflare relay)";
         else if (!status[0] && cursor >= 2 && cursor <= 4 && not_ready())
             p->footer = not_ready();
         break;
@@ -657,26 +661,10 @@ static void page_update(MenuPage *p, int cursor)
             go(HOME);
             snprintf(status, sizeof status, "%.120s", reason);
         } else if (state == PLAYER_HOST_READY) {
-            int registered = player_host_directory_state();
-            if (registered == 1) {
-                /* Registration has succeeded. The host still needs an
-                   externally reachable TCP 8787 port for remote friends. */
-                enter_room(1, NULL);
-            } else if (registered < 0 || GetTickCount64() - host_boot_started > 12000) {
-                /* The public H-code directory is missing or unavailable.
-                   Switch to a normal Cloudflare private room rather than
-                   showing a code remote friends cannot possibly resolve. */
-                player_host_stop();
-                hosted_mode = 0;
-                if (server()) {
-                    enter_room(1, NULL);
-                    snprintf(status, sizeof status, "Host directory offline - using cloud room");
-                    hle_log("online menu: directory unavailable, using Cloudflare private room\n");
-                } else {
-                    go(HOME);
-                    snprintf(status, sizeof status, "Host directory offline; no cloud server");
-                }
-            } else p->footer = "Registering your host code online...";
+            /* Native hosting never needs the directory or public race
+               server to start. Local joining works offline. Registration
+               affects only finding this H-code from another network. */
+            enter_room(1, NULL);
         } else p->footer = "Starting built-in multiplayer server...";
         break;
     }
