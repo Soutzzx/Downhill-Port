@@ -67,7 +67,9 @@ interface RoomState {
   createdAt: number;
   hostId: number | null;
   nextMemberId: number;
-  /** The host's build and ISO; every joiner must match them. Null until the host's hello. */
+  /** The host's build and game-data compatibility ID. The legacy field name
+   *  isoSha256 now holds the ID of the verified USA executable, rather than
+   *  the hash of the entire disc image. All joiners must match it. */
   version: string | null;
   isoSha256: string | null;
   roomName: string;
