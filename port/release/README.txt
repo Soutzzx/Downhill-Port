@@ -117,7 +117,20 @@ with its code. It works out of the box, on the project's official server
 (wss://dhd-online.downhill-revived.workers.dev). Every player needs the same USA disc image,
 and the newest version of the game: an older one is told "A new version is out. Update to play
 online." and offered Update Now.
-Running your own server is optional: put its address on the "server =" line of dhd.ini, e.g.
+Player Hosted (optional): choose ONLINE > Host A Private Game (Your PC).
+The game now starts the local server automatically, invisibly, then opens the
+Race Room. Give friends the six-character code; they still use Join With A Code.
+The local server closes automatically when you leave the hosted game or close
+dhd.exe. No CMD or PowerShell window needs to stay open manually.
+Hosting REQUIRES Node.js 22+ and the project's online/player-host.ps1 and
+online/server/ files in the release folder; just copying dhd.exe by itself is
+not sufficient for the host. Technical log: %%TEMP%%\dhd-player-host.log.
+Internet hosting also requires a reachable TCP port 8787 and a deployed room
+code directory; CGNAT may require a public IP or tunnel. Only the host needs
+the local server runtime; other players use Join With A Code normally.
+
+Running your own dedicated server is optional: put its address on the
+"server =" line of dhd.ini, e.g.
     server = wss://races.example.org
 A server of your own can keep an older version playing (its MIN_VERSION setting); then point
 update_url at your own latest.json, or set auto_update = off.
