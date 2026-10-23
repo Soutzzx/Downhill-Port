@@ -128,22 +128,29 @@ A controller works out of the box. The buttons go by position, as on a PlayStati
 bottom = Cross, right = Circle, left = Square, top = Triangle. A pad SDL doesn't know can be added
 with a line in SDL's format in `gamecontrollerdb.txt` beside `dhd.exe`.
 
-No controller? The keyboard plays a whole race (only while the game's window is in front; it
-works together with a controller):
+No controller? New installations use these default **independent** menu/gameplay mappings
+(they match the maintainer's tested preset, and can be changed in-game):
 
-| Key | Button | What |
+| Context | Action | Default |
 |---|---|---|
-| Arrow keys | d-pad / left stick | move in menus; steer and lean while riding (gradually: a tap steers a little, holding steers fully) |
-| Space or X | Cross | confirm; pedal (press twice: sprint) |
-| Esc, Backspace | Triangle | back in menus; while riding Esc pauses, Backspace brakes |
-| S | Triangle | brake (in the air: tweak a trick) |
-| Enter | START | start the race on the race setup screen, pause |
-| Tab | SELECT | hold + up/down changes the camera, with Q looks back; press twice to bail out |
-| Z / C | Square / Circle | punch / kick |
-| A / D | L1 / R1 | tricks (both together: Superman) |
-| Q / E | L2 / R2 | tricks; E (R2) is also bunny hop |
-| W | R3 | sprint |
-| F | L3 | powerslide |
+| Menu | Up / Down / Left / Right | W / S / A / D |
+| Menu | Confirm / Back | Space / Backspace (Esc also backs out) |
+| Menu | Start / Select | Enter / Tab |
+| Race | Steer left / right | A / D |
+| Race | Lean forward / backward | Left Shift / Left Ctrl |
+| Race | Pedal / pedal alternate | Up arrow / X |
+| Race | Brake / brake alternate | S / Backspace |
+| Race | Pause / start-pause | Esc / Enter |
+| Race | Camera | Tab |
+| Race | Punch / kick | Left mouse / Right mouse |
+| Race | Trick L1 / R1 | Q / E |
+| Race | Trick L2 / R2 | Z / Space |
+| Race | Sprint / powerslide | W / F |
+
+Restore Defaults in the in-game bindings menu loads this same preset. Existing
+`dhd.ini` input choices are **not overridden**, and keyboard bindings are
+independent of the physical controller. Holding Left Ctrl during a race does not
+block steering, pedal or attack bindings.
 
 Letters are places on the keyboard as on a US one: on AZERTY or QWERTZ use the keys in the same
 places. The game's own controls screen (OPTIONS > CONTROLS) names the PlayStation buttons; the
@@ -182,12 +189,15 @@ first start. The PC SETTINGS page writes most of them for you.
 | `renderer` | `native` | `native`, or `exact` (the slow reference path) |
 | `scale` | `2` | the 3D picture's resolution, `1` to `4` times the PS2's, or `window` |
 | `window` | `borderless` | `windowed`, `borderless` or `fullscreen` |
+| `width` / `height` | `1280` / `960` | Size when windowed; borderless uses the monitor |
+| `DHD_PRESENT_FILTER` | `linear` | Presentation scaling filter |
+| `fps` | `60` | Offline simulation rate |
 | `widescreen` | `1` | `1` the monitor's shape, `0` off, or a shape such as `21:9` |
 | `DHD_ASPECT` | `wide` | the picture's shape: `wide`, `4:3`, `16:9`, `stretch` or `pixels` |
 | `skip_movies` | `0` | `1` skips the movies |
 | `vibration` | on | `0` turns rumble off |
 | `texture_pack` | (empty) | a texture pack's folder; empty: `textures\SCUS-97177\replacements` beside `dhd.exe` |
-| `textures` | `on` | `off` draws the game's own textures |
+| `textures` | `off` | `off` draws the game's own textures |
 | `texture_cache_mb` | half the card's memory, at most 2048 | graphics memory for replacements |
 | `auto_update` | `ask` | `ask`, `on` (update without asking) or `off` (never look) |
 | `update_url` | (empty) | where to look for updates; empty: this project's GitHub releases |
