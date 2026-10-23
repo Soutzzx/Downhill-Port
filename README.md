@@ -117,12 +117,12 @@ The same key can be used once in each context without conflict. Gameplay
 bindings already stored as `bind_00`..`bind_18` remain valid; menu bindings
 use `menu_bind_00`..`menu_bind_07`. Esc always goes back in menus.
 
-**Mouse (menus only):** mouse wheel moves the selection, left click accepts the
-currently selected option, right click goes back. In native port popup menus
-(PC SETTINGS and bindings), moving the pointer over a row selects that row for
-a direct click. The game's original title/front-end menus do not yet have
-pointer hit-testing, so use wheel + click there. The mouse does nothing
-during a race. See [Controls](docs/CONTROLS.md).
+**Mouse buttons as gameplay bindings:** You can bind left/right/middle/X1/X2
+mouse buttons to gameplay actions such as Punch and Kick, as well as left/right
+Ctrl. Use OPTIONS > PC SETTINGS > KEYBOARD BINDINGS > GAMEPLAY BINDINGS.
+Mouse controls **do not navigate menus**: the previous menu hover/click feature
+was removed because its cursor alignment was unreliable. See
+[Controls](docs/CONTROLS.md) for testing and remapping details.
 
 A controller works out of the box. The buttons go by position, as on a PlayStation pad:
 bottom = Cross, right = Circle, left = Square, top = Triangle. A pad SDL doesn't know can be added
