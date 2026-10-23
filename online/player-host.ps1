@@ -95,7 +95,7 @@ try {
     $wrangler = Join-Path $server 'node_modules\.bin\wrangler.cmd'
     if (-not (Test-Path -LiteralPath $wrangler)) {
         Write-Host 'Installing local relay dependencies (first run only)...'
-        & npm.cmd ci --no-audit --no-fund
+        & npm.cmd ci --no-fund
         if ($LASTEXITCODE -ne 0) {
             throw "npm ci failed (exit code $LASTEXITCODE)."
         }
