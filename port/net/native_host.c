@@ -61,8 +61,7 @@ static uint64_t now_ms(void) {
     return n.QuadPart / 10000ULL - 11644473600000ULL;
 }
 static void fail(const char *msg) {
-    strncpy(error_message, msg, sizeof error_message - 1);
-    error_message[sizeof error_message - 1] = 0;
+    snprintf(error_message, sizeof error_message, "%s", msg);
     InterlockedExchange(&server_state, NATIVE_HOST_FAILED);
 }
 static int random_bytes(unsigned char *buffer, size_t n) {
@@ -265,7 +264,10 @@ static void process_json(int peer,const char *text) {
            !json_string(text,"name",name,sizeof name)||!name[0]) {
             fatal(p,"bad_message","Invalid hello fields.");return;
         }
-        if(p->create&&!member_count){strcpy(build_version,version);strcpy(iso_id,iso);}
+        if(p->create&&!member_count){
+            snprintf(build_version,sizeof build_version,"%s",version);
+            snprintf(iso_id,sizeof iso_id,"%s",iso);
+        }
         else {
             if(!member_count){fatal(p,"room_not_found","No room has this code.");return;}
             if(racing){fatal(p,"room_started","Race already running.");return;}
@@ -368,8 +370,14 @@ static int process_http(int peer) {
     int total=(int)(end-(char*)p->input);
     char request[IN_CAP];
     memcpy(request,p->input,total); request[total]=0;
-    char method[8],path[128];method[0]=path[0]=0;
-    sscanf(request,"%7s %127s",method,path);
+    char method[8]={0},path[128]={0};
+    const char *space=strchr(request,' ');
+    if(space&&space>request&&space-request<(int)sizeof method){
+        memcpy(method,request,(size_t)(space-request));
+        const char *endpath=strchr(space+1,' ');
+        if(endpath&&endpath>space+1&&endpath-(space+1)<(int)sizeof path)
+            memcpy(path,space+1,(size_t)(endpath-(space+1)));
+    }
     if(!strcmp(path,"/v1/health")&&!strcmp(method,"GET")){
         send_http(p,200,"application/json","{\"ok\":true,\"protocol\":1,\"minVersion\":\"0.1.0\"}");
     } else if(!strncmp(path,"/v1/player-host/",16)&&!strcmp(method,"GET")){
