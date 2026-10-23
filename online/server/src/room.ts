@@ -155,6 +155,13 @@ export class Room extends DurableObject<Env> {
     });
   }
 
+  /** For two test clients on the same PC: resolve a private code to
+      localhost without requiring NAT hairpin routing. Not public in the
+      Cloudflare deployment; only local hosts have DHD_PLAYER_HOST_PORT. */
+  async isLocalPlayerHostedRoom(): Promise<boolean> {
+    return !!(this.state?.hostToken && this.state.members.length);
+  }
+
   /** Called by the Worker for a fresh code. False if the code is in use. */
   async claim(code: string): Promise<boolean> {
     if (this.state) return false;
