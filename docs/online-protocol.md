@@ -79,6 +79,16 @@ use the same `error` frame **without** a close; the client just shows `message`.
 {"type":"hello","protocol":1,"version":"dhd-port 0.2.0 1a2b3c4d5e6f7a8b","clientVersion":"0.2.0",
  "isoSha256":"<64 lowercase hex>","name":"Rider"}
 
+// Note: the legacy "isoSha256" field is now the SHA-256-derived compatibility
+// identity of the game's verified USA SCUS_971.77 executable, NOT the SHA-256
+// of the complete ISO. This is deliberately still 64 lowercase hex digits,
+// so the current server can compare it without a protocol or deployment change.
+// game_data_read() checks the original game's exact executable before sending.
+// Different ISO images with the same verified program are accepted, but
+// changed executables/regions remain unsupported. Older clients using the
+// full ISO SHA-256 cannot mix with newly compiled clients (the build/version
+// gate already requires matching builds).
+
 // Host only. Every field optional; omitted fields keep their value.
 {"type":"settings","track":3,"laps":2,"seed":12345,"public":true,"maxPlayers":4,"roomName":"Friday race"}
 
