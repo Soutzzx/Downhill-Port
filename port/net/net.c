@@ -103,6 +103,34 @@ int net_create_room(void)
     return connect_to("/v1/rooms/new");
 }
 
+/* A six-character private code works for BOTH transports. The public
+   server only maps the code to the player's address and never relays hosted
+   race frames. If there is no registered direct host, continue with the
+   original public online service without changing its networking path. */
+int net_find_player_host(const char *code, char *url, size_t capacity)
+{
+    char request[350], body[512], resolved[192];
+    const char *registry = getenv("DHD_HOST_DIRECTORY");
+    if (!registry || !*registry) registry = getenv("DHD_NET_SERVER");
+    if (!url || capacity == 0) return 0;
+    url[0] = 0;
+    /* Ordinary codes take the existing server path without an additional
+       HTTP request. Player Hosted local relays issue H-prefixed codes. */
+    if (!registry || !*registry || !code || strlen(code) != 6 || toupper((unsigned char)code[0]) != 'H')
+        return 0;
+    for (const char *c = code; *c; c++)
+        if (!strchr("23456789ABCDEFGHJKMNPQRSTUVWXYZ", toupper((unsigned char)*c)))
+            return 0;
+    snprintf(request, sizeof request, "%s/v1/player-host/%s", registry, code);
+    if (http_get(request, body, sizeof body) <= 0 ||
+        !json_string(body, "url", resolved, sizeof resolved)) return 0;
+    if (strncmp(resolved, "ws://", 5) || strlen(resolved) + 1 > capacity ||
+        strchr(resolved + 5, '/') || strchr(resolved + 5, '@'))
+        return 0;
+    snprintf(url, capacity, "%s", resolved);
+    return 1;
+}
+
 int net_join_room(const char *code)
 {
     static const char alphabet[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";

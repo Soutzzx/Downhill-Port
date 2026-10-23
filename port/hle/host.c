@@ -953,7 +953,8 @@ static void apply_setting(const char *key, const char *value)
         {"scale", "DHD_SCALE"}, {"widescreen", "DHD_WIDESCREEN"}, {"msaa", "DHD_MSAA"}, {"fxaa", "DHD_FXAA"},
         {"filter", "DHD_FILTER"}, {"vibration", "DHD_VIBRATION"}, {"remap", "DHD_REMAP"}, {"memory_card", "DHD_MEMCARD"},
         {"sound_latency_ms", "DHD_SND_LATENCY_MS"},
-        {"server", "DHD_NET_SERVER"}, {"name", "DHD_NET_NAME"}, {"rider", "DHD_NET_RIDER"},  /* online (port/online) */
+        {"server", "DHD_NET_SERVER"}, {"host_directory", "DHD_HOST_DIRECTORY"},
+        {"name", "DHD_NET_NAME"}, {"rider", "DHD_NET_RIDER"},  /* online (port/online) */
         {"update_url", "DHD_UPDATE_URL"}, {"auto_update", "DHD_AUTO_UPDATE"},  /* the updater (update.c) */
         {"texture_pack", "DHD_TEXTURE_PACK"}, {"textures", "DHD_TEXTURES"},  /* texture packs (port/gs/texpack.c) */
         {"texture_cache_mb", "DHD_TEXTURE_CACHE_MB"},
@@ -1114,6 +1115,9 @@ static const char settings_template[] =
     "; server is empty. To use a server of your own, put its address here, for example\n"
     ";   server = wss://races.example.org\n"
     "server =\n"
+    "; Optional: directory that resolves H-prefixed player-hosted room codes.\n"
+    "; Use a separate Cloudflare Worker if you cannot deploy on the official server.\n"
+    "; host_directory = wss://your-online-directory.workers.dev\n"
     "\n"
     "; At start the game looks for a newer release and offers it; online races need the newest.\n"
     "; auto_update = ask (asks first), on (updates without asking) or off (never looks).\n"

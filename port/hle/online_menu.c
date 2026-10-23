@@ -64,6 +64,10 @@ static int choosing, selected, selection_requested, room_focus;
    while the camera flies to the rider screen it opens over; hold_rider until the press that
    closed it is released; resume_home: back on the title, ONLINE opens again. */
 static int in_shell, room_pending, hold_rider, resume_home;
+/* 0 means the existing public server. Hosted mode is used only while
+   creating a room on the local relay; code-based joining resolves both. */
+static int hosted_mode;
+enum { HOME_HOST = 5, HOME_UPDATE = 6 };
 static int chosen_rider, chosen_bike, ready_track, ready_options;
 static int public_room, room_settings_sent, room_ready_sent, room_track = 0, room_options;
 static int32_t chosen_outfit[3], chosen_cycle[3];
@@ -204,6 +208,7 @@ static const char outdated_text[] = "A new version is out. Update to play online
 
 static const char *server(void)
 {
+    if (hosted_mode) return "ws://127.0.0.1:8787";
     const char *s = getenv("DHD_NET_SERVER");
     return s && *s ? s : NULL;
 }
@@ -310,6 +315,7 @@ static void go(int to)
     screen = to;
     if (to == NAME || to == CODE) text_input_begin();
     if (to == ROOM) room_focus = selected;
+    if (to == HOME) hosted_mode = 0;
     status[0] = 0;
     menu_page_rebuild_at(&page, to == HOME ? home_row : 0);
 }
@@ -331,7 +337,18 @@ static void enter_room(int create, const char *code)
         snprintf(status, sizeof status, "%s", why);
         return;
     }
-    net_init(server(), name, version, iso_hash);
+    /* Join With A Code automatically detects player-hosted rooms through
+       the public rendezvous. Unknown codes use the existing Cloudflare
+       server, so old private rooms keep working unchanged. */
+    if (!create && !hosted_mode) {
+        char direct[192];
+        if (net_find_player_host(code, direct, sizeof direct)) {
+            net_init(direct, name, version, iso_hash);
+            hle_log("online menu: joining player-hosted room %s\n", code);
+        } else
+            net_init(server(), name, version, iso_hash);
+    } else
+        net_init(server(), name, version, iso_hash);
     if (create) net_create_room();
     else if (net_join_room(code) < 0) {
         snprintf(status, sizeof status, "That code can't be one");
@@ -340,7 +357,7 @@ static void enter_room(int create, const char *code)
     reset_selection();
     choosing = 0;
     selection_requested = 1;
-    public_room = create == 2;
+    public_room = !hosted_mode && create == 2;
     room_settings_sent = !create;  /* a guest who becomes host keeps the room as it is */
     room_ready_sent = 0;
     hle_log("online menu: %s %s\n", create ? "creating a room" : "joining", create ? (public_room ? "(public)" : "(private)") : code);
@@ -358,6 +375,7 @@ static void page_build(MenuPage *p)
         menu_page_row(p, "Create A Public Race", 1);
         menu_page_row(p, "Create A Private Race", 1);
         menu_page_row(p, "Join With A Code", 1);
+        menu_page_row(p, "Host A Private Game (Your PC)", 1);
         if (outdated) menu_page_row(p, "Update Now", 1);
         break;
     case LIST:
@@ -423,13 +441,14 @@ static void room_update(MenuPage *p, NetLobby *l)
         hle_log("online menu: refused: %s (%s)\n", l->error, l->error_code);
         net_leave();
         reset_selection();
-        if (too_old) home_row = 5;
+        if (too_old) home_row = HOME_UPDATE;
         if (in_shell) {  /* the rider screen's Back, then ONLINE again with the reason */
             race = 0;
             menu_page_close(p);
             return;
         }
         screen = HOME;
+        hosted_mode = 0;
         menu_page_rebuild_at(p, home_row);
         return;
     }
@@ -570,7 +589,10 @@ static void page_update(MenuPage *p, int cursor)
     p->footer = status[0] ? status : NULL;
     switch (screen) {
     case HOME:
-        if (!status[0] && cursor >= 2 && not_ready()) p->footer = not_ready();
+        if (!status[0] && cursor == HOME_HOST)
+            p->footer = "Start PlayerHost.cmd on this PC first";
+        else if (!status[0] && cursor >= 2 && cursor <= 4 && not_ready())
+            p->footer = not_ready();
         break;
     case LIST:
         if (list_state == 2 && !list_shown) menu_page_rebuild(p);  /* the answer came: the rows again */
@@ -618,7 +640,10 @@ static void page_accept(MenuPage *p, int row)
             entry[0] = 0;
             entry_pick = 0;
             go(CODE);
-        } else if (row == 5 && outdated) {
+        } else if (row == HOME_HOST) {
+            hosted_mode = 1;
+            enter_room(1, NULL);
+        } else if (row == HOME_UPDATE && outdated) {
             hle_log("online menu: Update Now\n");
             update_request();  /* ends the game; the first dhd.exe updates and starts it again */
         }
@@ -749,6 +774,7 @@ int port_online_menu(void)
     }
     race = 0;
     in_shell = 0;
+    hosted_mode = 0;
     run_page();
     if (!race) { net_leave(); reset_selection(); }
     return race;

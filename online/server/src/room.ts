@@ -72,6 +72,7 @@ interface RoomState {
    *  the hash of the entire disc image. All joiners must match it. */
   version: string | null;
   isoSha256: string | null;
+  hostToken?: string; // private local-only lease secret for code registration
   roomName: string;
   public: boolean;
   maxPlayers: number;
@@ -110,6 +111,36 @@ export class Room extends DurableObject<Env> {
 
   private listedKey: string | null = null;
   private listedAt = 0;
+  private hostedPublishedAt = 0;
+
+  private playerHostPort(): number {
+    const local = this.env as Env & { DHD_PLAYER_HOST_PORT?: string };
+    const port = Number(local.DHD_PLAYER_HOST_PORT ?? "");
+    return Number.isInteger(port) && port >= 1024 && port <= 65535 ? port : 0;
+  }
+
+  /* Only a local relay launched with DHD_PLAYER_HOST_PORT advertises itself.
+     The public Cloudflare server never invokes this path. The registry uses
+     the outbound connection's IP, not an untrusted address in the payload. */
+  private async publishPlayerHost(): Promise<void> {
+    const st = this.state;
+    const port = this.playerHostPort();
+    if (!st || !st.hostToken || !port || !st.members.length) return;
+    this.hostedPublishedAt = Date.now();
+    const config = this.env as Env & { DHD_HOST_REGISTRY?: string };
+    const base = config.DHD_HOST_REGISTRY ?? "https://dhd-online.downhill-revived.workers.dev";
+    try {
+      const response = await fetch(base + "/v1/player-host/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: st.code, port, token: st.hostToken }),
+      });
+      if (!response.ok) console.error("Player Hosted directory registration failed", response.status);
+    } catch (e) {
+      console.error("Player Hosted directory unavailable", String(e));
+    }
+  }
+
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -124,6 +155,13 @@ export class Room extends DurableObject<Env> {
     });
   }
 
+  /** For two test clients on the same PC: resolve a private code to
+      localhost without requiring NAT hairpin routing. Not public in the
+      Cloudflare deployment; only local hosts have DHD_PLAYER_HOST_PORT. */
+  async isLocalPlayerHostedRoom(): Promise<boolean> {
+    return !!(this.state?.hostToken && this.state.members.length);
+  }
+
   /** Called by the Worker for a fresh code. False if the code is in use. */
   async claim(code: string): Promise<boolean> {
     if (this.state) return false;
@@ -135,6 +173,7 @@ export class Room extends DurableObject<Env> {
       nextMemberId: 0,
       version: null,
       isoSha256: null,
+      hostToken: this.playerHostPort() ? crypto.randomUUID() : undefined,
       roomName: "",
       public: false,
       maxPlayers: DEFAULT_MAX_PLAYERS,
@@ -275,6 +314,9 @@ export class Room extends DurableObject<Env> {
       this.broadcastRoom();
       if (now - this.listedAt > LISTING_REFRESH_MS) this.updateListing(true);
     }
+    if (st.members.length && this.playerHostPort() &&
+        now - this.hostedPublishedAt > 20_000)
+      this.ctx.waitUntil(this.publishPlayerHost());
     await this.ctx.storage.setAlarm(now + PING_INTERVAL_MS);
   }
 
@@ -418,6 +460,8 @@ export class Room extends DurableObject<Env> {
     // First ping right away so the lobby shows a delay quickly.
     this.send(ws, { type: "ping", s: Date.now() });
     await this.changed();
+    if (asHost && this.playerHostPort())
+      this.ctx.waitUntil(this.publishPlayerHost());
   }
 
   private onPong(memberId: number, s: unknown): void {
