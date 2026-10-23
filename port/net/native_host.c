@@ -496,6 +496,58 @@ static DWORD WINAPI server_main(void *arg) {
     return 0;
 }
 
+
+/* The directory is only a private-code lookup. Its Worker stays online,
+   but race packets never pass through it. HTTPS registration uses the
+   host's public source IP; every connection to the local relay is direct. */
+static HANDLE registrar_thread, registrar_stop;
+static void directory_register(void) {
+    const char *custom = getenv("DHD_HOST_DIRECTORY");
+    const char *base = custom && *custom ? custom :
+        "https://dhd-online.downhill-revived.workers.dev";
+    char uri[350];
+    if (!strncmp(base,"wss://",6)) snprintf(uri,sizeof uri,"https://%s/v1/player-host/register",base+6);
+    else if (!strncmp(base,"https://",8)) snprintf(uri,sizeof uri,"%s/v1/player-host/register",base);
+    else return; /* private directory over plaintext is never used */
+    wchar_t wide[400],host[256],path[256];
+    MultiByteToWideChar(CP_UTF8,0,uri,-1,wide,400);
+    URL_COMPONENTS u;
+    memset(&u,0,sizeof u);u.dwStructSize=sizeof u;
+    u.lpszHostName=host;u.dwHostNameLength=256;
+    u.lpszUrlPath=path;u.dwUrlPathLength=256;
+    if(!WinHttpCrackUrl(wide,0,0,&u)||u.nScheme!=INTERNET_SCHEME_HTTPS)return;
+    char payload[190];
+    snprintf(payload,sizeof payload,"{\"code\":\"%s\",\"port\":8787,\"token\":\"%s\"}",
+             room_code,host_token);
+    HINTERNET ses=WinHttpOpen(L"Downhill Revived native host",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
+    if(!ses)return;
+    WinHttpSetTimeouts(ses,3000,3000,5000,5000);
+    HINTERNET conn=WinHttpConnect(ses,host,u.nPort,0);
+    HINTERNET req=conn?WinHttpOpenRequest(conn,L"POST",path,NULL,WINHTTP_NO_REFERER,
+                         WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE):NULL;
+    if(req){
+        static const wchar_t hdr[]=L"Content-Type: application/json\r\n";
+        if(WinHttpSendRequest(req,hdr,(DWORD)-1,payload,(DWORD)strlen(payload),
+                               (DWORD)strlen(payload),0)) {
+            WinHttpReceiveResponse(req,NULL);
+        }
+        WinHttpCloseHandle(req);
+    }
+    if(conn)WinHttpCloseHandle(conn);
+    WinHttpCloseHandle(ses);
+}
+static DWORD WINAPI registrar_main(void *unused) {
+    (void)unused;
+    while(WaitForSingleObject(registrar_stop,1000)==WAIT_TIMEOUT) {
+        if(member_count>0 && now_ms()-last_register>20000) {
+            last_register=now_ms();
+            directory_register();
+        }
+    }
+    return 0;
+}
+
 int native_host_start(void) {
     if(InterlockedCompareExchange(&server_state,0,0)==NATIVE_HOST_READY)return 1;
     native_host_stop();
@@ -525,6 +577,8 @@ int native_host_start(void) {
     worker=CreateThread(NULL,0,server_main,NULL,0,NULL);
     if(!worker){closesocket(listener);listener=INVALID_SOCKET;WSACleanup();
         fail("Cannot start the local relay thread.");return 0;}
+    registrar_stop=CreateEventW(NULL,TRUE,FALSE,NULL);
+    if(registrar_stop)registrar_thread=CreateThread(NULL,0,registrar_main,NULL,0,NULL);
     InterlockedExchange(&server_state,NATIVE_HOST_READY);
     return 1;
 }
@@ -536,6 +590,12 @@ int native_host_is_local_code(const char *code){
 }
 void native_host_stop(void){
     InterlockedExchange(&stop_requested,1);
+    if(registrar_stop)SetEvent(registrar_stop);
+    if(registrar_thread){
+        WaitForSingleObject(registrar_thread,INFINITE);
+        CloseHandle(registrar_thread);registrar_thread=NULL;
+    }
+    if(registrar_stop){CloseHandle(registrar_stop);registrar_stop=NULL;}
     if(worker){
         WaitForSingleObject(worker,3000);
         CloseHandle(worker);worker=NULL;
