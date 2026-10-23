@@ -121,6 +121,15 @@ int net_find_player_host(const char *code, char *url, size_t capacity)
     for (const char *c = code; *c; c++)
         if (!strchr("23456789ABCDEFGHJKMNPQRSTUVWXYZ", toupper((unsigned char)*c)))
             return 0;
+    /* Two EXEs on the same PC can resolve an H-code from the native
+       localhost listener even when no public directory has been deployed. */
+    snprintf(request, sizeof request, "http://127.0.0.1:8787/v1/player-host/%s", code);
+    if (http_get(request, body, sizeof body) > 0 &&
+        json_string(body, "url", resolved, sizeof resolved) &&
+        strlen(resolved) + 1 <= capacity) {
+        snprintf(url, capacity, "%s", resolved);
+        return 1;
+    }
     snprintf(request, sizeof request, "%s/v1/player-host/%s", registry, code);
     if (http_get(request, body, sizeof body) <= 0 ||
         !json_string(body, "url", resolved, sizeof resolved)) return 0;
