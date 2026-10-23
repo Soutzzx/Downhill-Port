@@ -192,19 +192,6 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy2(exe, out / 'dhd.exe')
     shutil.copy2(exe.with_suffix('.map'), out / 'dhd.map')
-    # The local relay's matching Worker source goes beside each build. This
-    # allows a user to host from the build folder with no separate CMD setup.
-    # Never ship a developer's local node_modules or secret environment files.
-    def copy_host_files(destination):
-        source = TREE / 'online'
-        target = destination / 'online'
-        target.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source / 'player-host.ps1', target / 'player-host.ps1')
-        shutil.copytree(source / 'server', target / 'server', dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns(
-                            'node_modules', '.wrangler', '.env*', '.dev.vars*',
-                            '.git', 'coverage', 'test-results', '*.log'))
-    copy_host_files(out)
     manifest = dict(commit=commit, exe_sha256=sha256(out / 'dhd.exe'), vu_aot=True, game_opt='-O1',
                     recomp_basis=str(a.recomp_basis) if a.recomp_basis else None,
                     built=time.strftime('%Y-%m-%d %H:%M:%S'), recipe='port/tools/build_clean.py')
@@ -216,7 +203,6 @@ def main():
         if dst.exists():
             shutil.copy2(dst, dst.with_name('dhd-previous.exe'))
         shutil.copy2(out / 'dhd.exe', dst)
-        copy_host_files(dst.parent)
         (dst.parent / 'build.json').write_text(json.dumps(manifest, indent=1) + '\n')
         # The settings launcher (port/launcher) beside it: Launcher.cmd -> Launcher.ps1 -> dhd.ini.
         shutil.copy2(ROOT / 'port' / 'launcher' / 'Launcher.ps1', dst.parent.parent / 'Launcher.ps1')
