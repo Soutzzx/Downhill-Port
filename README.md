@@ -110,6 +110,20 @@ need the newest version; an older one is offered Update Now in the ONLINE menu.
 
 ### Controls
 
+**In-game keyboard remapping:** OPTIONS > PC SETTINGS > KEYBOARD BINDINGS now
+separates **MENU BINDINGS** (up/down/left/right, confirm, back, start and select)
+from **GAMEPLAY BINDINGS** (steering, leaning, pedal, brake, tricks and pause).
+The same key can be used once in each context without conflict. Gameplay
+bindings already stored as `bind_00`..`bind_18` remain valid; menu bindings
+use `menu_bind_00`..`menu_bind_07`. Esc always goes back in menus.
+
+**Mouse (menus only):** mouse wheel moves the selection, left click accepts the
+currently selected option, right click goes back. In native port popup menus
+(PC SETTINGS and bindings), moving the pointer over a row selects that row for
+a direct click. The game's original title/front-end menus do not yet have
+pointer hit-testing, so use wheel + click there. The mouse does nothing
+during a race. See [Controls](docs/CONTROLS.md).
+
 A controller works out of the box. The buttons go by position, as on a PlayStation pad:
 bottom = Cross, right = Circle, left = Square, top = Triangle. A pad SDL doesn't know can be added
 with a line in SDL's format in `gamecontrollerdb.txt` beside `dhd.exe`.
