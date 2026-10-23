@@ -64,6 +64,7 @@ static DWORD WINAPI wait_for_relay(void *arg)
 {
     (void)arg;
     char body[256];
+    int healthy = 0;
     for (int i = 0; i < BOOT_CHECKS; i++) {
         if (InterlockedCompareExchange(&host_stop, 0, 0)) return 0;
         if (host_process && WaitForSingleObject(host_process, 0) == WAIT_OBJECT_0) {
@@ -71,13 +72,20 @@ static DWORD WINAPI wait_for_relay(void *arg)
             return 0;
         }
         /* Health check on localhost, NOT against the remote code directory.
-           Calls happen in this thread so the game/menu never stalls. */
+           Calls happen in this thread so the game/menu never stalls.
+           Require consecutive replies with the child still alive so an
+           already running manual PlayerHost.cmd cannot be mistaken for
+           the newly launched and game-managed host. */
         if (http_get("http://127.0.0.1:8787/v1/health", body, sizeof body) > 0 &&
             strstr(body, "\"ok\"") && strstr(body, "true") &&
             strstr(body, "\"protocol\"")) {
-            if (!InterlockedCompareExchange(&host_stop, 0, 0))
-                InterlockedExchange(&host_state, PLAYER_HOST_READY);
-            return 0;
+            if (++healthy >= 4) {
+                if (!InterlockedCompareExchange(&host_stop, 0, 0))
+                    InterlockedExchange(&host_state, PLAYER_HOST_READY);
+                return 0;
+            }
+        } else {
+            healthy = 0;
         }
         Sleep(500);
     }
