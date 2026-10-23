@@ -286,7 +286,7 @@ static const char *not_ready(void)
     if (!server()) return "No server: set server = ... in dhd.ini";
     if (!render || strcmp(render, "native")) return "Online races need the native renderer";
     if (iso_state == 1) return "Checking game compatibility...";
-    if (iso_state != 2) return "Incompatible game data: USA SCUS-97177 required";
+    if (iso_state != 2) return "Requires compatible USA SCUS-97177 ISO";
     return NULL;
 }
 
