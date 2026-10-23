@@ -93,6 +93,12 @@ void keyboard_reset(void);
 int keyboard_game_axis(int raw);           /* the game's reading of a stick byte (-127..127) */
 int keyboard_script(const char *script, double seconds, uint8_t down[256]);  /* DHD_KEYS */
 int keyboard_bind_count(void);
+int keyboard_menu_count(void);
+int keyboard_menu_key(int index);
+const char *keyboard_menu_action(int index);
+int keyboard_menu_load(int index, int key);
+int keyboard_menu_set(int index, int key);
+void keyboard_menu_defaults(void);
 int keyboard_bind_key(int index);
 const char *keyboard_bind_action(int index);
 const char *keyboard_bind_name(int key);

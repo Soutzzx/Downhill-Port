@@ -1,45 +1,77 @@
-# Remapeamento de teclas no PC (Windows)
+# Menu e corrida com teclas independentes (Windows)
 
-O suporte a controles USB/Bluetooth (SDL3, XInput e Sony HID) não foi alterado.
+O suporte existente a controles Xbox, DualSense, DualShock, Switch Pro e
+controles genéricos não foi alterado. O mouse não é utilizado durante a corrida.
 
-## Onde configurar
+## Remapeamento dentro do jogo
 
-Após gerar um novo dhd.exe com estas alterações, entre em:
+Abra **OPTIONS > PC SETTINGS > KEYBOARD BINDINGS**.
 
-**OPTIONS > PC SETTINGS > KEYBOARD BINDINGS**
+- **MENU BINDINGS:** cima, baixo, esquerda, direita, confirmar, voltar, iniciar e selecionar.
+- **GAMEPLAY BINDINGS:** direção, inclinação, pedal, freio, pausa, manobras, câmera,
+  soco, chute, sprint e derrapagem, divididos em duas páginas.
+- Selecione a ação, solte a tecla de confirmação e pressione a nova tecla.
+- Esc cancela a captura; nos menus, Esc continua sendo uma tecla de segurança
+  para voltar mesmo quando BACK foi remapeada.
+- É permitido usar **a mesma tecla em uma ação de menu e outra de corrida**.
+  Por exemplo: W sobe nos menus e inclina o ciclista na corrida, sem conflito.
+- Duas ações do **mesmo** contexto continuam trocando de tecla em caso de
+  conflito para evitar acionar dois comandos diferentes ao mesmo tempo.
+- Cada grupo tem seu botão de restaurar padrões.
 
-São duas páginas com as ações de direção (esquerda/direita e inclinação),
-pedalar, frear, golpes, manobras, câmera, pausa, sprint e derrapagem.
+### Padrões de menu
 
-1. Escolha a ação e aperte Cross (Space na configuração padrão).
-2. Solte a tecla de confirmação.
-3. Pressione a nova tecla e solte-a. Esc cancela.
-4. As teclas são salvas automaticamente no dhd.ini que fica junto ao jogo.
+| Ação | Tecla |
+|---|---|
+| Cima | Seta para cima |
+| Baixo | Seta para baixo |
+| Esquerda | Seta para esquerda |
+| Direita | Seta para direita |
+| Confirmar | Espaço |
+| Voltar | Backspace (Esc também funciona sempre) |
+| Iniciar | Enter |
+| Selecionar | Tab |
 
-O atalho Esc para voltar/pausar permanece fixo para evitar perder
-a possibilidade de cancelar o menu. Se uma nova tecla já pertencia
-a outra ação, as duas são trocadas.
+Os padrões de corrida permanecem os da versão anterior, incluindo Esc para
+pausar e as ações alternativas de pedal e freio. Pausa e voltar agora têm
+contextos separados; mudar a pausa na corrida não muda a tecla de voltar do menu.
 
-Na segunda página há a opção **Restore default keys**.
+## Mouse: somente nos menus
 
-## Compatibilidade
+O mouse nunca controla câmera, direção, ataques ou personagem durante a corrida.
 
-- Todos os jogos têm os mesmos controles padrão se o jogador nunca configurar o teclado.
-- As configurações novas são salvas como bind_00 até bind_18 no dhd.ini.
-- O teclado continua enviando entradas de DualShock 2 à lógica original, de
-  modo que o funcionamento do controle permanece independente.
-- Há uma seção específica em docs/BUILDING.md para compilar o executável.
+- **Rolagem:** navega para cima/baixo em menus tradicionais e popups do port.
+- **Clique esquerdo:** confirma a opção atualmente selecionada no menu original.
+- **Clique direito:** volta/cancela nos menus.
+- **Passar o cursor e clicar numa linha:** seleciona diretamente a linha nos
+  menus popup do port, como PC SETTINGS, MENU BINDINGS e GAMEPLAY BINDINGS.
 
-## Testes necessários antes do merge
+A seleção direta pelo ponteiro foi implementada para os popups da camada nativa
+do port. As telas originais do PS2, incluindo a página inicial, têm layouts e
+códigos de seleção diferentes e **ainda usam rolagem + clique para selecionar**.
+Os limites visuais da seleção de popups são aproximados e precisam de teste no
+Windows em resoluções e proporções de tela diferentes.
 
-Estas mudanças estão em um pull request experimental e precisam
-ser compiladas e testadas em Windows com o jogo:
+## Configurações antigas preservadas
 
-- Remapear a direção para WASD e confirmar movimentação durante a corrida.
-- Remapear o pedal, soltar a tecla e garantir que não confirma menus involuntariamente.
-- Reiniciar o jogo, verificar persistência no dhd.ini.
-- Conferir se Esc cancela a captura e ainda permite sair dos menus.
-- Restaurar padrões e verificar o teclado.
-- Confirmar que o controle físico continua funcionando normalmente.
+- `bind_00` até `bind_18` em `dhd.ini` continuam sendo as teclas da **corrida**.
+- `menu_bind_00` até `menu_bind_07` são as novas teclas do **menu**.
+- Sem configuração de menu no arquivo, entram os padrões de seta, Space,
+  Backspace, Enter e Tab.
+- As configurações são salvas em `dhd.ini` junto do `dhd.exe`.
 
-Não há ISO nem arquivos derivados do jogo no pull request.
+## Testes antes da distribuição
+
+Este PR precisa de **compilação e testes reais no Windows**:
+
+1. Alterar movimento de corrida para WASD sem afetar as setas do menu.
+2. Colocar W para subir no menu e também inclinar na corrida; ambos devem funcionar.
+3. Alterar confirmar no menu e pedal na corrida separadamente.
+4. Alterar a pausa na corrida; Esc deve continuar permitindo sair dos menus.
+5. Testar os botões de restaurar, reiniciar o jogo e conferir persistência.
+6. Testar mouse com janela 4:3, 16:9 e borderless; cursor sobre cada linha dos
+   menus de opções; rolagem e clique no menu inicial.
+7. Confirmar que durante a corrida o mouse não influencia a jogabilidade.
+8. Confirmar que um controle físico continua funcionando normalmente.
+
+Sem arquivos originais do jogo ou ISO neste PR.

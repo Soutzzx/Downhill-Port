@@ -1,37 +1,10 @@
-/* The keyboard as player 1's DualShock 2 (finding 059). host.c reads which keys are down (only
-   while the game's window has focus) and this file turns them into pad state, merged with the
-   controller's, so both work at once.
-
-   The game reads its controls two ways (src: func_00220550 sets D_0029E290):
-   - in menus (D_0029E290 = 0) only buttons count, each press once: the d-pad moves, Cross
-     accepts, Triangle goes back, START starts a race or pauses;
-   - while riding (D_0029E290 = 1) buttons are held and the left stick steers (X) and leans (Y)
-     in proportion (func_0017E1C0, func_0017E300). The d-pad steers too, but always at full lock
-     (func_0012DEB0 reads a digital press as 1.0).
-   So while riding the arrow keys move the left stick instead of the d-pad, ramped: full tilt
-   ~100 ms after the press, back to centre at once on release. The ramp is linear in what the
-   game makes of the stick: func_00220AE0 has a dead zone (raw 92-162) and two slopes, and the
-   steering squares the result (v * v / 127), so each step of the ramp picks the raw value whose
-   steering is the wanted fraction of full lock. Esc pauses while riding (START) and goes back
-   in menus (Triangle).
-
-   A key keeps the meaning it had when it went down until it is let go: Esc pressed while riding
-   stays START while the pause menu opens, so the menu doesn't see a Triangle and close again.
-
-   Layout (keys are Windows virtual-key codes):
-     arrows     d-pad in menus; steer / lean while riding (left stick, ramped)
-     Space, X   Cross     confirm; pedal (twice: sprint)
-     S          Triangle  back; brake (tweak a trick in the air)
-     Backspace  Triangle  back; brake
-     Esc        Triangle in menus (back), START while riding (pause)
-     Enter      START     start the race, pause
-     Tab        SELECT    hold + up/down: camera; with Q: look back; twice: bail out
-     Z          Square    punch
-     C          Circle    kick
-     A, D       L1, R1    tricks (both: Superman)
-     Q, E       L2, R2    tricks; R2 bunny hop
-     W          R3        sprint
-     F          L3        powerslide */
+/* Keyboard bindings are split by context: menus have independent arrow/accept/back/start
+   keys and gameplay has its own steering/lean/pedal/brake/tricks/pause keys.
+   The same key may be used in both contexts without swapping unrelated assignments.
+   The old bind_00..bind_18 keys are retained for backward-compatible dhd.ini files.
+   Esc is always an emergency BACK in menus and can be changed for gameplay pause.
+   Holding a key while transitioning between race and menus does not activate the
+   newly active context until that key is released. */
 #include "hle.h"
 #include "../include/fps.h"
 
@@ -39,100 +12,133 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <windows.h>
+
+int gs_mouse_wheel_take(void);    /* port/gs/present.c */
+int menu_page_mouse_active(void); /* port/hle/menu_page.c */
 
 enum { VK_BACK_ = 0x08, VK_TAB_ = 0x09, VK_RETURN_ = 0x0D, VK_ESCAPE_ = 0x1B, VK_SPACE_ = 0x20,
        VK_LEFT_ = 0x25, VK_UP_ = 0x26, VK_RIGHT_ = 0x27, VK_DOWN_ = 0x28 };
 enum { NO_AXIS, LEFT_X, LEFT_Y };
-
 typedef struct {
     uint8_t key;
-    uint16_t menu, riding;  /* the button in menus and while riding */
-    uint8_t axis;           /* while riding: the left stick axis it moves instead, */
-    int8_t dir;             /* -1 left/up, 1 right/down */
+    uint16_t button;
+    uint8_t axis; 
+    int8_t dir;
 } Key;
 
-static Key keys[] = {
-    {VK_LEFT_, PAD_LEFT, 0, LEFT_X, -1},   {VK_RIGHT_, PAD_RIGHT, 0, LEFT_X, 1},
-    {VK_UP_, PAD_UP, 0, LEFT_Y, -1},       {VK_DOWN_, PAD_DOWN, 0, LEFT_Y, 1},
-    {VK_SPACE_, PAD_CROSS, PAD_CROSS},     {'X', PAD_CROSS, PAD_CROSS},
-    {'S', PAD_TRIANGLE, PAD_TRIANGLE},     {VK_BACK_, PAD_TRIANGLE, PAD_TRIANGLE},
-    {VK_ESCAPE_, PAD_TRIANGLE, PAD_START}, {VK_RETURN_, PAD_START, PAD_START},
-    {VK_TAB_, PAD_SELECT, PAD_SELECT},     {'Z', PAD_SQUARE, PAD_SQUARE},
-    {'C', PAD_CIRCLE, PAD_CIRCLE},         {'A', PAD_L1, PAD_L1},
-    {'D', PAD_R1, PAD_R1},                 {'Q', PAD_L2, PAD_L2},
-    {'E', PAD_R2, PAD_R2},                 {'W', PAD_R3, PAD_R3},
-    {'F', PAD_L3, PAD_L3},
+enum { GAME_KEYS = 19, MENU_KEYS = 8, MAX_TRACKED_KEYS = GAME_KEYS + MENU_KEYS + 1 };
+static Key game_keys[GAME_KEYS] = {
+    {VK_LEFT_, 0, LEFT_X, -1}, {VK_RIGHT_, 0, LEFT_X, 1},
+    {VK_UP_, 0, LEFT_Y, -1}, {VK_DOWN_, 0, LEFT_Y, 1},
+    {VK_SPACE_, PAD_CROSS}, {'X', PAD_CROSS},
+    {'S', PAD_TRIANGLE}, {VK_BACK_, PAD_TRIANGLE},
+    {VK_ESCAPE_, PAD_START}, {VK_RETURN_, PAD_START},
+    {VK_TAB_, PAD_SELECT}, {'Z', PAD_SQUARE}, {'C', PAD_CIRCLE},
+    {'A', PAD_L1}, {'D', PAD_R1}, {'Q', PAD_L2}, {'E', PAD_R2},
+    {'W', PAD_R3}, {'F', PAD_L3}
 };
-enum { KEYS = sizeof keys / sizeof *keys };
-/* Key numbers are intentionally stable: bind_00 ... bind_18 in dhd.ini.
-   The escape key remains fixed, so the menu always has a way to cancel. */
-static const uint8_t defaults[] = {
+static Key menu_keys[MENU_KEYS] = {
+    {VK_UP_, PAD_UP}, {VK_DOWN_, PAD_DOWN},
+    {VK_LEFT_, PAD_LEFT}, {VK_RIGHT_, PAD_RIGHT},
+    {VK_SPACE_, PAD_CROSS}, {VK_BACK_, PAD_TRIANGLE},
+    {VK_RETURN_, PAD_START}, {VK_TAB_, PAD_SELECT}
+};
+static const uint8_t game_defaults[GAME_KEYS] = {
     VK_LEFT_, VK_RIGHT_, VK_UP_, VK_DOWN_, VK_SPACE_, 'X', 'S', VK_BACK_, VK_ESCAPE_,
     VK_RETURN_, VK_TAB_, 'Z', 'C', 'A', 'D', 'Q', 'E', 'W', 'F'
 };
-static const char *const actions[] = {
+static const uint8_t menu_defaults[MENU_KEYS] = {
+    VK_UP_, VK_DOWN_, VK_LEFT_, VK_RIGHT_, VK_SPACE_, VK_BACK_, VK_RETURN_, VK_TAB_
+};
+static const char *const game_actions[GAME_KEYS] = {
     "Steer left", "Steer right", "Lean forward", "Lean back",
-    "Pedal / confirm", "Pedal (alt)", "Brake / back", "Brake (alt)",
-    "Pause / back", "Start / pause", "Camera / select", "Punch",
+    "Pedal", "Pedal (alt)", "Brake", "Brake (alt)",
+    "Pause", "Start / pause", "Camera", "Punch",
     "Kick", "Trick L1", "Trick R1", "Trick L2", "Trick R2",
     "Sprint", "Powerslide"
 };
+static const char *const menu_actions[MENU_KEYS] = {
+    "Move up", "Move down", "Move left", "Move right",
+    "Confirm", "Back", "Start", "Select"
+};
 static int suppress_keys;
-void keyboard_reset(void); /* used by binding setters below */
+void keyboard_reset(void);
 
-int keyboard_bind_count(void) { return KEYS; }
-int keyboard_bind_key(int index) { return index >= 0 && index < KEYS ? keys[index].key : 0; }
+int keyboard_bind_count(void) { return GAME_KEYS; }
+int keyboard_menu_count(void) { return MENU_KEYS; }
+int keyboard_bind_key(int index) { return index >= 0 && index < GAME_KEYS ? game_keys[index].key : 0; }
+int keyboard_menu_key(int index) { return index >= 0 && index < MENU_KEYS ? menu_keys[index].key : 0; }
 const char *keyboard_bind_action(int index)
 {
-    return index >= 0 && index < KEYS ? actions[index] : "";
+    return index >= 0 && index < GAME_KEYS ? game_actions[index] : "";
+}
+const char *keyboard_menu_action(int index)
+{
+    return index >= 0 && index < MENU_KEYS ? menu_actions[index] : "";
 }
 int keyboard_bind_valid(int key)
 {
     if (key < 8 || key >= 255) return 0;
     switch (key) {
-    case VK_ESCAPE_: case 0x10: case 0x11: case 0x12: /* shift / ctrl / alt */
-    case 0x5B: case 0x5C: case 0x14: case 0x90: /* Win / caps / num lock */
+    case VK_ESCAPE_: /* reserved for menu escape during remapping */
+    case 0x10: case 0x11: case 0x12:  /* modifiers */
+    case 0x5B: case 0x5C: case 0x14: case 0x90: /* Win / Caps / Num lock */
     case 0x01: case 0x02: case 0x04: /* mouse buttons */
         return 0;
     }
     return 1;
 }
-/* A duplicate binding swaps the other action, rather than activating both
-   actions when the player presses a single key. */
-int keyboard_bind_load(int index, int key)
+static int bind_load(Key *keys, int count, int index, int key)
 {
-    if (index < 0 || index >= KEYS || index == 8 || !keyboard_bind_valid(key)) return 0;
+    if (index < 0 || index >= count || !keyboard_bind_valid(key)) return 0;
     keys[index].key = (uint8_t)key;
     keyboard_reset();
     return 1;
 }
-int keyboard_bind_set(int index, int key)
+/* Allow the legacy/default Esc on gameplay Pause, but do not capture Esc
+   (it always cancels remapping). */
+int keyboard_bind_load(int index, int key)
 {
-    if (index < 0 || index >= KEYS || index == 8 || !keyboard_bind_valid(key))
-        return 0;
+    if (index == 8 && key == VK_ESCAPE_) {
+        game_keys[index].key = VK_ESCAPE_;
+        keyboard_reset();
+        return 1;
+    }
+    return bind_load(game_keys, GAME_KEYS, index, key);
+}
+int keyboard_menu_load(int index, int key) { return bind_load(menu_keys, MENU_KEYS, index, key); }
+static int bind_set(Key *keys, int count, int index, int key)
+{
+    if (index < 0 || index >= count || !keyboard_bind_valid(key)) return 0;
     int old = keys[index].key;
     if (old == key) return 1;
-    for (int i = 0; i < KEYS; i++)
+    /* Conflicts swap only within the active context, not across menu and gameplay. */
+    for (int i = 0; i < count; i++) {
         if (i != index && keys[i].key == key) {
-            if (i == 8) return 0;
             keys[i].key = (uint8_t)old;
             break;
         }
+    }
     keys[index].key = (uint8_t)key;
     keyboard_reset();
     return 1;
 }
+int keyboard_bind_set(int index, int key) { return bind_set(game_keys, GAME_KEYS, index, key); }
+int keyboard_menu_set(int index, int key) { return bind_set(menu_keys, MENU_KEYS, index, key); }
 void keyboard_bind_defaults(void)
 {
-    for (int i = 0; i < KEYS; i++) keys[i].key = defaults[i];
+    for (int i = 0; i < GAME_KEYS; i++) game_keys[i].key = game_defaults[i];
     keyboard_reset();
 }
-void keyboard_bind_capture(int active)
+void keyboard_menu_defaults(void)
 {
-    suppress_keys = !!active;
+    for (int i = 0; i < MENU_KEYS; i++) menu_keys[i].key = menu_defaults[i];
     keyboard_reset();
 }
+void keyboard_bind_capture(int active) { suppress_keys = !!active; keyboard_reset(); }
 int keyboard_bind_suppressed(void) { return suppress_keys; }
+
 const char *keyboard_bind_name(int key)
 {
     static char names[8][24];
@@ -155,25 +161,31 @@ const char *keyboard_bind_name(int key)
     return out;
 }
 
-
 #define RAMP_SECONDS 0.1
 #define FIELD_SECONDS (port_fps_high() ? port_frame_period() : 1.0 / 60)
 
 static struct {
-    int8_t held[KEYS];      /* 0 up, 1 down as in menus, 2 down as while riding */
-    int8_t dir[3];          /* each stick axis: the direction the arrows last gave it, */
-    double since[3];        /* from when (its ramp starts there) */
-} state;
+    int mode;                 /* -1 before first poll, 0 menu, 1 riding */
+    uint8_t ignore[256];      /* held keys from the previous context */
+    int8_t dir[3];
+    double since[3];
+} state = {.mode = -1};
 
 const uint8_t *keyboard_keys(int *count)
 {
-    static uint8_t list[KEYS];
-    for (int i = 0; i < KEYS; i++) list[i] = keys[i].key;
-    *count = KEYS;
+    static uint8_t list[MAX_TRACKED_KEYS];
+    for (int i = 0; i < GAME_KEYS; i++) list[i] = game_keys[i].key;
+    for (int i = 0; i < MENU_KEYS; i++) list[GAME_KEYS + i] = menu_keys[i].key;
+    list[GAME_KEYS + MENU_KEYS] = VK_ESCAPE_;
+    *count = MAX_TRACKED_KEYS;
     return list;
 }
 
-void keyboard_reset(void) { memset(&state, 0, sizeof state); }
+void keyboard_reset(void)
+{
+    memset(&state, 0, sizeof state);
+    state.mode = -1;
+}
 
 /* What the game makes of a raw stick byte: func_00220AE0 (riding, D_0029E290 = 1). */
 int keyboard_game_axis(int raw)
@@ -214,37 +226,85 @@ static uint8_t ramp_raw(double fraction, int dir)
     return (uint8_t)raw;
 }
 
-/* Merges the keys that are down into `out` (a controller's state, or a neutral pad): buttons and
-   pressures add, the left stick follows the arrows while riding. */
+/* The original game's title/options menus still use their own selection system.
+   Mouse wheel navigates its currently selected row, left click confirms, right
+   click goes back. Host popup pages do their own cursor hit testing and clicks.
+   No mouse buttons or wheel are sent to gameplay. */
+static int mouse_left_prev, mouse_right_prev;
+static uint16_t keyboard_menu_mouse(int riding)
+{
+    int wheel = gs_mouse_wheel_take();
+    HWND hwnd = GetForegroundWindow();
+    DWORD pid = 0;
+    char cls[64] = "";
+    if (hwnd) GetWindowThreadProcessId(hwnd, &pid);
+    int active = hwnd && pid == GetCurrentProcessId() &&
+                 GetClassNameA(hwnd, cls, sizeof cls) && !strcmp(cls, "DHDNativeGS");
+    int left = active && !!(GetAsyncKeyState(VK_LBUTTON) & 0x8000);
+    int right = active && !!(GetAsyncKeyState(VK_RBUTTON) & 0x8000);
+    uint16_t buttons = 0;
+    if (!riding && active && !suppress_keys) {
+        if (wheel > 0) buttons |= PAD_UP;
+        else if (wheel < 0) buttons |= PAD_DOWN;
+        if (!menu_page_mouse_active()) {
+            if (left && !mouse_left_prev) buttons |= PAD_CROSS;
+            if (right && !mouse_right_prev) buttons |= PAD_TRIANGLE;
+        }
+    }
+    mouse_left_prev = left;
+    mouse_right_prev = right;
+    return buttons;
+}
+
+/* Converts keyboard input into pad input for the active context only.
+   Menu UP/DOWN never depends on the gameplay steering bindings. */
 void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
 {
-    static const uint16_t pressure_order[12] = {PAD_RIGHT, PAD_LEFT, PAD_UP, PAD_DOWN, PAD_TRIANGLE, PAD_CIRCLE,
-                                                PAD_CROSS, PAD_SQUARE, PAD_L1, PAD_R1, PAD_L2, PAD_R2};
+    static const uint16_t pressure_order[12] = {
+        PAD_RIGHT, PAD_LEFT, PAD_UP, PAD_DOWN, PAD_TRIANGLE, PAD_CIRCLE,
+        PAD_CROSS, PAD_SQUARE, PAD_L1, PAD_R1, PAD_L2, PAD_R2
+    };
     uint16_t buttons = 0;
     int dir[3] = {0};
+    riding = !!riding;
+    uint16_t mouse_buttons = keyboard_menu_mouse(riding);
     if (suppress_keys) { keyboard_reset(); return; }
-    for (int i = 0; i < KEYS; i++) {
-        const Key *k = &keys[i];
-        if (!down[k->key]) {
-            state.held[i] = 0;
-            continue;
+    if (state.mode >= 0 && state.mode != riding)
+        for (int vk = 0; vk < 256; vk++)
+            if (down[vk]) state.ignore[vk] = 1;
+    state.mode = riding;
+    for (int vk = 0; vk < 256; vk++)
+        if (!down[vk]) state.ignore[vk] = 0;
+
+    if (riding) {
+        for (int i = 0; i < GAME_KEYS; i++) {
+            const Key *k = &game_keys[i];
+            if (!down[k->key] || state.ignore[k->key]) continue;
+            if (k->axis) dir[k->axis] += k->dir;
+            else buttons |= k->button;
         }
-        if (!state.held[i]) state.held[i] = riding ? 2 : 1;
-        if (state.held[i] == 2 && k->axis) dir[k->axis] += k->dir;
-        else buttons |= state.held[i] == 2 ? k->riding : k->menu;
+    } else {
+        for (int i = 0; i < MENU_KEYS; i++) {
+            const Key *k = &menu_keys[i];
+            if (down[k->key] && !state.ignore[k->key]) buttons |= k->button;
+        }
+        /* Esc always offers a way out, even after a badly chosen menu binding. */
+        if (down[VK_ESCAPE_] && !state.ignore[VK_ESCAPE_]) buttons |= PAD_TRIANGLE;
     }
+
     for (int axis = LEFT_X; axis <= LEFT_Y; axis++) {
-        if (dir[axis] != state.dir[axis]) {  /* pressed, let go or turned: the ramp starts again */
+        if (dir[axis] != state.dir[axis]) {
             state.dir[axis] = (int8_t)dir[axis];
             state.since[axis] = now;
         }
-        if (!dir[axis]) continue;  /* none, or both directions: the centre */
+        if (!dir[axis]) continue;
         double fraction = (now - state.since[axis] + FIELD_SECONDS) / RAMP_SECONDS;
         if (fraction > 1) fraction = 1;
         uint8_t raw = ramp_raw(fraction, dir[axis]);
         if (axis == LEFT_X) out->left_x = raw;
         else out->left_y = raw;
     }
+    buttons |= mouse_buttons;
     out->buttons |= buttons;
     for (int i = 0; i < 12; i++)
         if (buttons & pressure_order[i]) out->pressure[i] = 255;

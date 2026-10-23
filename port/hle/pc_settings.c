@@ -63,15 +63,16 @@ static Row rows[ROWS] = {
 static MenuPage page;
 static int loaded;
 static char footer[128];
-/* An in-game controls page, reusing the PC SETTINGS popup and its menu instance.
-   No nested modal menu: the original page changes its rows when switching views. */
-enum { VIEW_PC, VIEW_KEYS_FIRST, VIEW_KEYS_MORE };
-static int input_view;
-static int capture_index = -1, capture_phase;
-static char bind_text[19][72];
-static const char *const key_next = "More key bindings ->";
-static const char *const key_back = "Back to PC settings";
-static const char *const key_restore = "Restore default keys";
+enum { VIEW_PC, VIEW_MENU_KEYS, VIEW_GAME_KEYS_FIRST, VIEW_GAME_KEYS_MORE };
+static int input_view, capture_index = -1, capture_phase, capture_menu;
+static char game_text[19][80], menu_text[8][80];
+static const char *const menu_game_next = "GAMEPLAY BINDINGS  >";
+static const char *const menu_restore = "Restore menu defaults";
+static const char *const menu_back = "Back to PC settings";
+static const char *const game_more = "MORE GAMEPLAY BINDINGS  >";
+static const char *const game_back = "Back to menu bindings";
+static const char *const game_restore = "Restore gameplay defaults";
+static const char *const game_prev = "Previous gameplay bindings";
 
 static void save_bindings(void)
 {
@@ -79,8 +80,13 @@ static void save_bindings(void)
         char key[24], value[16];
         snprintf(key, sizeof key, "bind_%02d", i);
         snprintf(value, sizeof value, "%d", keyboard_bind_key(i));
-        if (!host_setting_save(key, value))
-            hle_log("bindings: failed to save %s\n", key);
+        if (!host_setting_save(key, value)) hle_log("bindings: failed to save %s\n", key);
+    }
+    for (int i = 0; i < keyboard_menu_count(); i++) {
+        char key[24], value[16];
+        snprintf(key, sizeof key, "menu_bind_%02d", i);
+        snprintf(value, sizeof value, "%d", keyboard_menu_key(i));
+        if (!host_setting_save(key, value)) hle_log("bindings: failed to save %s\n", key);
     }
 }
 static int game_focused(void)
@@ -108,25 +114,29 @@ static void view_set(MenuPage *p, int view, int cursor)
 {
     capture_stop();
     input_view = view;
-    p->title = view == VIEW_PC ? "PC SETTINGS" : "KEY BINDINGS";
+    p->title = view == VIEW_PC ? "PC SETTINGS" :
+               view == VIEW_MENU_KEYS ? "MENU BINDINGS" : "GAMEPLAY BINDINGS";
     menu_page_rebuild_at(p, cursor);
 }
-static void start_capture(MenuPage *p, int index)
+static void start_capture(MenuPage *p, int index, int is_menu)
 {
-    if (index < 0 || index >= keyboard_bind_count() || index == 8) return;
+    int count = is_menu ? keyboard_menu_count() : keyboard_bind_count();
+    if (index < 0 || index >= count) return;
     capture_index = index;
-    capture_phase = 0; /* wait for menu's confirm key to be released */
-    keyboard_bind_capture(1); /* prevent the typed key acting inside the game */
-    p->footer = "Release keys, then press a key (ESC cancels)";
+    capture_menu = is_menu;
+    capture_phase = 0;
+    keyboard_bind_capture(1);
+    p->footer = "Release keys, then press a new key (Esc cancels)";
 }
 static void update_bindings(void)
 {
+    for (int i = 0; i < keyboard_menu_count(); i++)
+        snprintf(menu_text[i], sizeof menu_text[i], "%-19.19s %s",
+                 keyboard_menu_action(i), keyboard_bind_name(keyboard_menu_key(i)));
     for (int i = 0; i < keyboard_bind_count(); i++)
-        snprintf(bind_text[i], sizeof bind_text[i], "%-18.18s %s%s",
-                 keyboard_bind_action(i), keyboard_bind_name(keyboard_bind_key(i)),
-                 i == 8 ? " (fixed)" : capture_index == i ? " < PRESS KEY >" : "");
+        snprintf(game_text[i], sizeof game_text[i], "%-19.19s %s",
+                 keyboard_bind_action(i), keyboard_bind_name(keyboard_bind_key(i)));
 }
-
 
 /* The value the program runs with now: the variable (set from dhd.ini or the environment). */
 static void current(const Row *r, char *out, size_t size)
@@ -212,16 +222,20 @@ static void change(int index, int step)
 
 static void page_build(MenuPage *p)
 {
-    if (input_view == VIEW_KEYS_FIRST) {
-        update_bindings();
-        for (int i = 0; i < 10; i++) menu_page_row(p, bind_text[i], i != 8);
-        menu_page_row(p, key_next, 1);
-        menu_page_row(p, key_back, 1);
-    } else if (input_view == VIEW_KEYS_MORE) {
-        update_bindings();
-        for (int i = 10; i < keyboard_bind_count(); i++) menu_page_row(p, bind_text[i], 1);
-        menu_page_row(p, key_restore, 1);
-        menu_page_row(p, "Previous key bindings <-", 1);
+    update_bindings();
+    if (input_view == VIEW_MENU_KEYS) {
+        for (int i = 0; i < keyboard_menu_count(); i++) menu_page_row(p, menu_text[i], 1);
+        menu_page_row(p, menu_game_next, 1);
+        menu_page_row(p, menu_restore, 1);
+        menu_page_row(p, menu_back, 1);
+    } else if (input_view == VIEW_GAME_KEYS_FIRST) {
+        for (int i = 0; i < 10; i++) menu_page_row(p, game_text[i], 1);
+        menu_page_row(p, game_more, 1);
+        menu_page_row(p, game_back, 1);
+    } else if (input_view == VIEW_GAME_KEYS_MORE) {
+        for (int i = 10; i < keyboard_bind_count(); i++) menu_page_row(p, game_text[i], 1);
+        menu_page_row(p, game_restore, 1);
+        menu_page_row(p, game_prev, 1);
     } else {
         for (int i = 0; i < ROWS; i++) {
             format(&rows[i]);
@@ -231,37 +245,36 @@ static void page_build(MenuPage *p)
     }
 }
 
-static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
+static void page_update(MenuPage *p, int cursor)
 {
-    if (input_view == VIEW_KEYS_FIRST || input_view == VIEW_KEYS_MORE) {
+    if (input_view != VIEW_PC) {
         if (capture_index >= 0) {
             int key = capture_down();
             if (capture_phase == 0) {
                 if (!key) capture_phase = 1;
             } else if (capture_phase == 1 && key) {
-                if (key != VK_ESCAPE && keyboard_bind_set(capture_index, key))
+                if (key != VK_ESCAPE &&
+                    (capture_menu ? keyboard_menu_set(capture_index, key) :
+                                    keyboard_bind_set(capture_index, key)))
                     save_bindings();
                 capture_phase = 2;
-                update_bindings();
             } else if (capture_phase == 2 && !key) {
-                int old = capture_index;
+                int index = capture_index;
+                int row = capture_menu || input_view == VIEW_GAME_KEYS_FIRST ? index : index - 10;
                 capture_stop();
-                menu_page_rebuild_at(p, old < 10 ? old : old - 10);
+                menu_page_rebuild_at(p, row);
             }
-            p->footer = capture_phase == 0 ? "Release keys first" :
-                        capture_phase == 1 ? "Press new key; ESC to cancel" : "Release key...";
+            p->footer = capture_phase == 0 ? "Release all keys" :
+                        capture_phase == 1 ? "Press a new key, ESC to cancel" : "Release key...";
+        } else if (input_view == VIEW_MENU_KEYS && cursor == keyboard_menu_count()) {
+            p->footer = "Gameplay can use the same keys as the menu";
         } else {
-            p->footer = input_view == VIEW_KEYS_MORE && cursor == 9
-                        ? "Reset keyboard bindings to defaults"
-                        : "CROSS: change key, TRIANGLE: back";
+            p->footer = "Cross: change key / Esc: back";
         }
         update_bindings();
         return;
     }
-    if (cursor == ROWS) {
-        p->footer = "CROSS: remap keyboard keys";
-        return;
-    }
+    if (cursor == ROWS) { p->footer = "Change menu keys and gameplay keys separately"; return; }
     const Row *r = cursor >= 0 && cursor < ROWS ? &rows[cursor] : NULL;
     p->footer = NULL;
     if (r && locked(r)) {
@@ -271,16 +284,18 @@ static void page_update(MenuPage *p, int cursor)  /* the footer for the row */
     else if (r == &rows[TEXTURES] && !texpack_available()) p->footer = "No pack: see texture_pack in dhd.ini";
 }
 
-static void page_back(MenuPage *p)  /* Triangle: the values the page opened with, close */
+static void page_back(MenuPage *p)
 {
     if (capture_index >= 0) {
-        int row = input_view == VIEW_KEYS_FIRST ? capture_index : capture_index - 10;
+        int index = capture_index;
+        int row = capture_menu || input_view == VIEW_GAME_KEYS_FIRST ? index : index - 10;
         capture_stop();
         menu_page_rebuild_at(p, row);
         return;
     }
-    if (input_view == VIEW_KEYS_FIRST) { view_set(p, VIEW_PC, ROWS); return; }
-    if (input_view == VIEW_KEYS_MORE) { view_set(p, VIEW_KEYS_FIRST, 10); return; }
+    if (input_view == VIEW_MENU_KEYS) { view_set(p, VIEW_PC, ROWS); return; }
+    if (input_view == VIEW_GAME_KEYS_FIRST) { view_set(p, VIEW_MENU_KEYS, 8); return; }
+    if (input_view == VIEW_GAME_KEYS_MORE) { view_set(p, VIEW_GAME_KEYS_FIRST, 10); return; }
     for (int i = 0; i < ROWS; i++) {
         Row *r = &rows[i];
         if (r->selected == r->opened || r->opened < 0) continue;
@@ -290,29 +305,45 @@ static void page_back(MenuPage *p)  /* Triangle: the values the page opened with
     menu_page_cancel(p);
 }
 
-static void page_left(MenuPage *p, int index) { (void)p; if (input_view == VIEW_PC) change(index, -1); }
-static void page_right(MenuPage *p, int index) { (void)p; if (input_view == VIEW_PC) change(index, 1); }
+static void page_left(MenuPage *p, int index)
+{
+    (void)p;
+    if (input_view == VIEW_PC) change(index, -1);
+}
+static void page_right(MenuPage *p, int index)
+{
+    (void)p;
+    if (input_view == VIEW_PC) change(index, 1);
+}
 static void page_accept(MenuPage *p, int index)
 {
     if (capture_index >= 0) return;
     if (input_view == VIEW_PC) {
-        if (index == ROWS) view_set(p, VIEW_KEYS_FIRST, 0);
+        if (index == ROWS) view_set(p, VIEW_MENU_KEYS, 0);
         else menu_page_close(p);
-    } else if (input_view == VIEW_KEYS_FIRST) {
-        if (index < 10) start_capture(p, index);
-        else if (index == 10) view_set(p, VIEW_KEYS_MORE, 0);
-        else view_set(p, VIEW_PC, ROWS);
-    } else if (input_view == VIEW_KEYS_MORE) {
-        if (index < 9) start_capture(p, index + 10);
+    } else if (input_view == VIEW_MENU_KEYS) {
+        if (index < keyboard_menu_count()) start_capture(p, index, 1);
+        else if (index == 8) view_set(p, VIEW_GAME_KEYS_FIRST, 0);
+        else if (index == 9) {
+            keyboard_menu_defaults();
+            save_bindings();
+            menu_page_rebuild_at(p, 9);
+        } else view_set(p, VIEW_PC, ROWS);
+    } else if (input_view == VIEW_GAME_KEYS_FIRST) {
+        if (index < 10) start_capture(p, index, 0);
+        else if (index == 10) view_set(p, VIEW_GAME_KEYS_MORE, 0);
+        else view_set(p, VIEW_MENU_KEYS, 8);
+    } else if (input_view == VIEW_GAME_KEYS_MORE) {
+        if (index < 9) start_capture(p, index + 10, 0);
         else if (index == 9) {
             keyboard_bind_defaults();
             save_bindings();
             menu_page_rebuild_at(p, 9);
-        } else view_set(p, VIEW_KEYS_FIRST, 10);
+        } else view_set(p, VIEW_GAME_KEYS_FIRST, 10);
     }
 }
 
-/* OPTIONS, item 9 (patched func_001F0160): run the page until it closes. */
+/* OPTIONS, item 9: the game's built-in option item still opens this page. */
 void port_pc_settings(void)
 {
     capture_stop();
@@ -320,11 +351,11 @@ void port_pc_settings(void)
     page.title = "PC SETTINGS";
     page.build = page_build;
     page.update = page_update;
-    page.accept = page_accept; /* Cross enters controls, otherwise retains settings */
+    page.accept = page_accept;
     page.back = page_back;
     page.left = page_left;
     page.right = page_right;
-    if (!loaded) {  /* what runs now; restart rows keep their pending choice across visits */
+    if (!loaded) {
         char value[32];
         for (int i = 0; i < ROWS; i++) {
             current(&rows[i], value, sizeof value);
