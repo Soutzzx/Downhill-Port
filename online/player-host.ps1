@@ -93,12 +93,24 @@ if (-not $nodeOk) {
 Push-Location -LiteralPath $server
 try {
     $wrangler = Join-Path $server 'node_modules\.bin\wrangler.cmd'
-    if (-not (Test-Path -LiteralPath $wrangler)) {
-        Write-Host 'Installing local relay dependencies (first run only)...'
+    $lockfile = Join-Path $server 'package-lock.json'
+    if (-not (Test-Path -LiteralPath $lockfile)) {
+        throw 'Missing package-lock.json in the local host package.'
+    }
+    $lockHash = (Get-FileHash -LiteralPath $lockfile -Algorithm SHA256).Hash
+    $readyMarker = Join-Path $server '.dhd-host-deps-ok'
+    $previousHash = if (Test-Path -LiteralPath $readyMarker) {
+        (Get-Content -LiteralPath $readyMarker -Raw).Trim()
+    } else { '' }
+    if (-not (Test-Path -LiteralPath $wrangler) -or $previousHash -ne $lockHash) {
+        Write-Host 'Installing local relay dependencies (first run or updated version)...'
         & npm.cmd ci --no-fund
         if ($LASTEXITCODE -ne 0) {
             throw "npm ci failed (exit code $LASTEXITCODE)."
         }
+        # Mark only a completed installation. If hosting is cancelled during
+        # npm ci, the next launch retries instead of using half-written files.
+        Set-Content -LiteralPath $readyMarker -Value $lockHash -Encoding ASCII
     }
     if (-not (Test-Path -LiteralPath $wrangler)) {
         throw 'Wrangler was not installed. See npm output.'
