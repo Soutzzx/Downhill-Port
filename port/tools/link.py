@@ -170,7 +170,7 @@ def runtime():
                  'hle/movie.c',
                  # online races (port/net, finding 042)
                  'net/lockstep.c', 'net/hash.c', 'net/json.c', 'net/client.c', 'net/ws_winhttp.c', 'net/net.c',
-                 'net/player_host.c',
+                 'net/player_host.c', 'net/native_host.c',
                  # the keyboard and the controllers through SDL3 (finding 059)
                  'hle/keyboard.c', 'hle/text_input.c', 'hle/gamepad.c'):
         o = os.path.join(OUT, name + '.o')
@@ -288,7 +288,7 @@ def main():
     def link(extra=()):
         return run(['clang', '--target=' + HOST_TARGET, '-fuse-ld=lld', '-o', os.path.join(OUT, 'dhd.exe'),
                     '@' + rsp, '-Wl,d3dcompiler.lib', '-Wl,d3d11.lib', '-Wl,dxgi.lib', '-Wl,user32.lib', '-Wl,gdi32.lib', '-Wl,winhttp.lib', '-Wl,ole32.lib', *extra, '-Wl,/map:' + os.path.join(OUT, 'dhd.map'), '-Wl,/subsystem:windows', '-Wl,/entry:mainCRTStartup', '-Wl,/safeseh:no', '-Wl,/demangle:no',
-                    '-Wl,/force', '-Wl,/errorlimit:0',
+                    '-Wl,ws2_32.lib', '-Wl,bcrypt.lib', '-Wl,/force', '-Wl,/errorlimit:0',
                     # above the emulated PS2 RAM and its mirrors (port/runtime/memory.c), never moved
                     '-Wl,/base:0x%X' % IMAGE_BASE, '-Wl,/fixed', '-Wl,/dynamicbase:no',
                     # the PS2 never protected .rodata and the game writes some (func_00208900
