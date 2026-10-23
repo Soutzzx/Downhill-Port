@@ -10,6 +10,7 @@ enum { PLAYER_HOST_STOPPED = 0, PLAYER_HOST_STARTING = 1,
 int player_host_start(void);
 int player_host_state(void);
 const char *player_host_error(void);
+int player_host_directory_state(void);
 void player_host_stop(void);
 
 #endif
