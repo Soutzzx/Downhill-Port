@@ -101,6 +101,7 @@ def run():
     proc = subprocess.Popen([executable], stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True)
     host = guest = None
+    others = []
     try:
         assert proc.stdout.readline().strip() == "NATIVE_HOST_READY"
         with socket.create_connection((HOST, PORT), 3) as s:
@@ -121,25 +122,39 @@ def run():
             response = s.recv(2048)
             assert b"ws://127.0.0.1:8787" in response
 
+        # Explicitly raise the room from its default 8 (and verify it).
+        send_json(host, {"type": "settings", "maxPlayers": 8, "track": 2, "laps": 0})
         guest = ws("/v1/rooms/" + code)
         g = hello(guest, "FRIEND")
         assert not g["host"] and g["code"] == code
-        members = recv_type(host, "room")["members"]
-        assert len(members) == 2
 
-        send_json(host, {"type": "settings", "maxPlayers": 8, "track": 2, "laps": 0})
+        # Six more guests: one host plus seven friends, without Node or ISO.
+        for i in range(6):
+            sock = ws("/v1/rooms/" + code)
+            result = hello(sock, f"RIDER{i+3}")
+            assert result["memberId"] >= 2
+            others.append(sock)
+        while True:
+            members = recv_type(host, "room")["members"]
+            if len(members) == 8:
+                break
+
         send_json(host, {"type": "ready", "ready": True})
-        send_json(guest, {"type": "ready", "ready": True})
-        # The host sees all room snapshots; ready confirmation may take >1 frame.
+        for sock in [guest, *others]:
+            send_json(sock, {"type": "ready", "ready": True})
         while True:
             snapshot = recv_type(host, "room")
-            if all(x["ready"] for x in snapshot["members"]):
+            if len(snapshot["members"]) == 8 and all(x["ready"] for x in snapshot["members"]):
                 break
         send_json(host, {"type": "start"})
         a = recv_type(host, "start")
         b = recv_type(guest, "start")
-        assert len(a["players"]) == len(b["players"]) == 2
+        assert len(a["players"]) == len(b["players"]) == 8
         assert a["yourSlot"] == 0 and b["yourSlot"] == 1
+        for i, sock in enumerate(others):
+            started = recv_type(sock, "start")
+            assert len(started["players"]) == 8
+            assert started["yourSlot"] == i + 2
 
         # A state-sync frame from the guest must arrive at the host with slot 1.
         frame_data = bytes((5, 0)) + b"DATA"
@@ -149,9 +164,9 @@ def run():
             if opcode == 2 and payload[0] == 5:
                 assert payload[1] == 1
                 break
-        print("Native room, join code, ready/start and binary relay: PASS")
+        print("Native 8-player room, join code, Ready/Start and binary relay: PASS")
     finally:
-        for sock in (host, guest):
+        for sock in [host, guest, *others]:
             if sock:
                 sock.close()
         proc.terminate()
