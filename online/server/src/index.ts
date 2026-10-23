@@ -84,7 +84,10 @@ export default {
              every ordinary Cloudflare private-room join through a second
              directory lookup. They are still six standard characters. */
           const localHost = (env as Env & { DHD_PLAYER_HOST_PORT?: string }).DHD_PLAYER_HOST_PORT;
-          const random = randomCode();
+          /* Reserve Hxxxxx for direct Player Hosted. Public/private
+             Cloudflare race rooms get ordinary codes and never overlap. */
+          let random = randomCode();
+          if (!localHost) while (random.startsWith("H")) random = randomCode();
           const code = localHost ? "H" + random.slice(1) : random;
           const room = env.ROOM.get(env.ROOM.idFromName(code));
           if (await room.claim(code)) return room.fetch(new Request(request, { headers }));
