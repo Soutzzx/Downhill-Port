@@ -159,7 +159,14 @@ keys above stand for them.
 ### Online
 
 Online works out of the box: choose ONLINE in the main menu to create a public or private race,
-or join one from the list or with its code. The game uses the project's official server,
+or join one from the list or with its code. **Player Hosted** is a new, optional
+private-room mode: a friend runs the local relay, creates a room and shares
+only its six-character code. **Join With A Code** automatically resolves
+both normal and player-hosted rooms; no IP is entered in the game.
+Self-hosting needs Node.js, an accessible TCP port and a public code directory
+deployed from the updated server code. Read
+[Player Hosted setup and limitations](docs/PLAYER-HOSTED.md).
+The game uses the project's official server,
 `wss://dhd-online.downhill-revived.workers.dev`. Different ISO dumps can play
 together when they contain the **same verified USA SCUS_971.77 game executable**.
 The online mode no longer requires identical SHA-256 hashes of the entire ISO.
