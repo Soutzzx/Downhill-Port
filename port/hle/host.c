@@ -1029,14 +1029,17 @@ int host_setting_locked(const char *name)
 
 static int settings_has(const char *key);
 
-/* A player's settings where dhd.ini doesn't say (round 40, finding 056): the native renderer at
-   2x, borderless on the monitor at its own resolution, widescreen in the monitor's shape with
-   the HUD kept in shape, the startup movies played (skip_movies 0, finding 055). Only
-   with a dhd.ini (the game writes one on the first start; the release ships none): the tools
-   run without one and keep the old defaults, and a line in dhd.ini or a DHD_* variable wins. */
+/* Defaults for a player's new installation, matching the preconfigured
+   Windows gameplay/menu layout. Existing dhd.ini entries and DHD_* environment
+   overrides win. Headless tools without a settings file retain their own
+   historical defaults. The user's ISO is never part of these defaults. */
 static const char *const player_defaults[][3] = {
-    {"renderer", "native", "DHD_RENDER"}, {"scale", "2", "DHD_SCALE"}, {"window", "borderless", "DHD_WINDOW"},
-    {"widescreen", "1", "DHD_WIDESCREEN"}, {"DHD_ASPECT", "wide", "DHD_ASPECT"}, {"skip_movies", "0", "DHD_SKIP_MOVIES"},
+    {"renderer", "native", "DHD_RENDER"}, {"scale", "2", "DHD_SCALE"},
+    {"window", "borderless", "DHD_WINDOW"}, {"width", "1280", "DHD_WINDOW_WIDTH"},
+    {"height", "960", "DHD_WINDOW_HEIGHT"}, {"widescreen", "1", "DHD_WIDESCREEN"},
+    {"DHD_ASPECT", "wide", "DHD_ASPECT"}, {"DHD_PRESENT_FILTER", "linear", "DHD_PRESENT_FILTER"},
+    {"skip_movies", "0", "DHD_SKIP_MOVIES"}, {"fps", "60", "DHD_FPS"},
+    {"textures", "off", "DHD_TEXTURES"}, {"font", "sharp", "DHD_FONT"},
 };
 
 void host_settings_load(void)
@@ -1054,11 +1057,12 @@ void host_settings_load(void)
         char *key = trim(s), *value = setting_value(trim(eq + 1));
         if (*key && *value) apply_setting(key, value);
     }
-    if (f) {
-        fclose(f);
+    if (f) fclose(f);
+    /* Also activate defaults on the very first launch, before the ISO picker
+       creates dhd.ini. Keep no-file headless test runs unchanged. */
+    if (f || !getenv("DHD_HEADLESS"))
         for (unsigned i = 0; i < sizeof player_defaults / sizeof *player_defaults; i++)
             if (!settings_has(player_defaults[i][0])) setting(player_defaults[i][2], player_defaults[i][1]);
-    }
     setting("DHD_NET_SERVER", OFFICIAL_SERVER);  /* no server set (an empty "server =" sets none) */
 }
 
@@ -1095,8 +1099,11 @@ static const char settings_template[] =
     "renderer = native\n"
     "scale = 2\n"
     "window = borderless\n"
+    "width = 1280\n"
+    "height = 960\n"
     "widescreen = 1\n"
     "DHD_ASPECT = wide\n"
+    "DHD_PRESENT_FILTER = linear\n"
     "skip_movies = 0\n"
     "; Offline real simulation rate: 60 (original), 120, 144 or monitor (max 144).\n"
     "; Online always uses 60. Frame rate changes apply at the next start.\n"
@@ -1120,7 +1127,7 @@ static const char settings_template[] =
     "; used if there is one. textures = off draws the game's own textures (PC SETTINGS > Texture\n"
     "; Pack).\n"
     "texture_pack =\n"
-    "textures = on\n"
+    "textures = off\n"
     "\n"
     "; font: sharp draws the game's font with clean edges at any resolution (made in memory from\n"
     "; the font on your disc each time the game starts); original draws it as the PS2 does.\n"
