@@ -636,10 +636,11 @@ static void keyboard_merge(HostPad *out)
         const uint8_t *keys = keyboard_keys(&count);
         for (int i = 0; i < count; i++) {
             UINT vk = keys[i];
-            /* Support LEFT/RIGHT CTRL as bound actions, but do not interpret
-               Ctrl+letters/arrows as gameplay: those are system/app shortcuts.
-               Mouse buttons are virtual keys and are read directly here too. */
-            if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+            /* LEFT CTRL is the default lean-back action. During a race,
+               do not suppress simultaneous steering, pedaling or attacks
+               when CTRL is held; otherwise the provided defaults conflict.
+               Outside gameplay, retain the Ctrl+key shortcut protection. */
+            if (!riding_controls() && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
                 vk != VK_LCONTROL && vk != VK_RCONTROL)
                 continue;
             if (vk >= 'A' && vk <= 'Z') {
