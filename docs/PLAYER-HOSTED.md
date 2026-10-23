@@ -16,21 +16,38 @@ O multiplayer tradicional da Cloudflare **não foi substituído**.
 **Não é preciso informar IP ou porta para entrar.** A identificação por código
 funciona depois de o diretório ser configurado e o PC do host estar acessível.
 
-## Para quem hospeda
+## Para quem hospeda — inicialização automática
 
-- O host precisa de Windows, **Node.js 22+**, arquivos `online/server/`
-  deste repositório e acesso à internet na instalação inicial.
-- Na raiz do projeto, execute **PlayerHost.cmd**. Ele instala dependências
-  via `npm ci` na primeira execução e inicia o servidor **local** em
-  TCP 8787 (`wrangler dev --local`).
-- Deixe esse terminal aberto; no jogo escolha
-  **ONLINE > Host A Private Game (Your PC)**. Não use a criação de sala
-  pública/cloud para esse modo.
-- Quando aparecer **RACE ROOM** com `CODE: XXXXXX`, passe **apenas o
-  código** aos amigos. Eles usam **Join With A Code** de sempre.
-- Até **8 jogadores**, incluindo o host, utilizando o mesmo protocolo do
-  servidor atual. O servidor **não executa gráficos nem a simulação dos
-  oito jogadores**: recebe e redistribui seus estados de corrida.
+**Não é mais necessário abrir `PlayerHost.cmd` manualmente.**
+
+1. Abra `dhd.exe` e entre em **ONLINE > Host A Private Game (Your PC)**.
+2. O jogo inicia o relay local em segundo plano, sem CMD visível, e mostra
+   uma tela temporária com **Cancel** até `/v1/health` responder.
+3. Quando estiver pronto, entra automaticamente no **RACE ROOM**, criando
+   a sala e o código de seis caracteres.
+4. Envie **apenas esse código** aos amigos. Eles usam o mesmo
+   **ONLINE > Join With A Code** de sempre.
+5. Ao sair da sala/voltar do multiplayer, o processo do servidor e seus
+   subprocessos são encerrados. Se `dhd.exe` for fechado, o Windows também
+   os encerra com um Job Object.
+
+O primeiro uso pode demorar um pouco mais: o script instala dependências
+com `npm ci` quando necessário. Se falhar, o jogo informa o problema;
+as informações técnicas estão em `%TEMP%\\dhd-player-host.log`.
+`PlayerHost.cmd` permanece disponível apenas para testes e depuração manual.
+
+**Limite atual importante:** para hospedar, a máquina ainda precisa de
+**Node.js 22+** e dos arquivos `online/player-host.ps1` e
+`online/server/` (incluindo `package.json`, lockfile e código fonte).
+O `dhd.exe` sozinho **não contém** esse runtime/servidor. O jogo procura
+esses arquivos ao lado do executável ou em pastas pai, facilitando os
+testes a partir do repositório. Uma distribuição pública deve incluir os
+arquivos de host e ter o Node.js instalado/disponível, ou criar um
+empacotamento autossuficiente separado.
+
+Até **8 jogadores**, incluindo o host, utilizando o mesmo protocolo do
+servidor atual. O servidor não renderiza oito jogos: recebe e redistribui
+os estados da corrida.
 
 O código é anunciado no serviço de diretório apenas quando há um jogador
 hospedando e renovado periodicamente. Os registros vencem em até 90 segundos
@@ -93,8 +110,9 @@ Minas, Rio de Janeiro e Nordeste: depende da operadora, rota e upload do host.
    Player Hosted, gere um `dhd.exe` novo e instale o diretório atualizado.
 2. Crie uma sala privada normal na Cloudflare, entre usando o código e
    verifique que ela continua funcionando.
-3. Abra `PlayerHost.cmd`, crie sala pelo novo botão e confirme que o log
-   local não mostra erro de registro.
+3. Escolha `ONLINE > Host A Private Game (Your PC)`, sem abrir CMD;
+   confirme a criação da sala. Consulte `%TEMP%\\dhd-player-host.log`
+   se o servidor não iniciar ou o registro falhar.
 4. Consulte `https://SEU-WORKER.workers.dev/v1/player-host/CODIGO` no
    navegador: deve retornar o endereço do host, sem exigir IP no jogo.
 5. Tente entrar pelo código em outro PC/rede; depois teste Ready, Start,
