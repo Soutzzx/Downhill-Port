@@ -104,9 +104,15 @@ static int capture_down(void)
     const int mouse[] = {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2};
     for (size_t i = 0; i < sizeof mouse / sizeof mouse[0]; i++)
         if (GetAsyncKeyState(mouse[i]) & 0x8000) return mouse[i];
-    /* Prefer the physical sides of Ctrl over its generic alias. */
+    /* Identify physical left/right modifiers before the generic Windows
+       virtual key. These can be saved independently as bindings. */
     if (GetAsyncKeyState(VK_LCONTROL) & 0x8000) return VK_LCONTROL;
     if (GetAsyncKeyState(VK_RCONTROL) & 0x8000) return VK_RCONTROL;
+    if (GetAsyncKeyState(VK_LSHIFT) & 0x8000) return VK_LSHIFT;
+    if (GetAsyncKeyState(VK_RSHIFT) & 0x8000) return VK_RSHIFT;
+    /* VK_CAPITAL's high bit is set only while Caps Lock is physically held:
+       do not use its toggle-state low bit as a perpetual keypress. */
+    if (GetAsyncKeyState(VK_CAPITAL) & 0x8000) return VK_CAPITAL;
     for (int vk = 8; vk < 255; vk++)
         if ((keyboard_bind_valid(vk) || vk == VK_ESCAPE) && (GetAsyncKeyState(vk) & 0x8000))
             return vk;
