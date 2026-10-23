@@ -71,6 +71,7 @@ static int hosted_mode;
 /* Track whether the rider screen was really reached; intermediate menu 15
    is also used while navigating to it and must not close customization. */
 static int visited_rider_screen, host_code_unresolved, host_code_direct;
+static ULONGLONG host_boot_started;
 enum { HOME_HOST = 5, HOME_UPDATE = 6 };
 static int chosen_rider, chosen_bike, ready_track, ready_options;
 static int public_room, room_settings_sent, room_ready_sent, room_track = 0, room_options;
@@ -366,7 +367,11 @@ static void enter_room(int create, const char *code)
         }
     } else {
         host_code_unresolved = host_code_direct = 0;
-        net_init(server(), name, version, iso_hash);
+        /* The native host runs INSIDE dhd.exe. Creating the room against
+           Cloudflare instead would give us a cloud code and leave the
+           native host with zero members, never published in the directory. */
+        net_init(hosted_mode && create ? "ws://127.0.0.1:8787" : server(),
+                 name, version, iso_hash);
     }
     if (create) net_create_room();
     else if (net_join_room(code) < 0) {
@@ -577,7 +582,10 @@ static void room_update(MenuPage *p, NetLobby *l)
     else if (conflict) p->footer = "Rider taken: change your selection";
     else if (!selected) p->footer = "Choose your rider, bike and outfit first";
     else if (l->nmembers < 2) {
-        snprintf(footer, sizeof footer, "Waiting for players: friends join with the code %s", l->code);
+        if (hosted_mode)
+            snprintf(footer, sizeof footer, "Waiting for friends - TCP 8787 must be reachable");
+        else
+            snprintf(footer, sizeof footer, "Waiting for players: friends join with code %s", l->code);
         p->footer = footer;
     } else if (!own_ready) p->footer = "Ready when you like your selection";
     else if (missing > 0) {
@@ -641,18 +649,34 @@ static void page_update(MenuPage *p, int cursor)
         break;
     case HOST_BOOT: {
         int state = player_host_state();
-        if (state == PLAYER_HOST_READY) {
-            /* The local /v1/health endpoint is answering: now and only
-               now can /v1/rooms/new succeed. */
-            enter_room(1, NULL);
-        } else if (state == PLAYER_HOST_FAILED) {
+        if (state == PLAYER_HOST_FAILED) {
             char reason[200];
             snprintf(reason, sizeof reason, "%s", player_host_error());
             player_host_stop();
             go(HOME);
             snprintf(status, sizeof status, "%.120s", reason);
-        } else
-            p->footer = "Starting local server (first setup may take time)";
+        } else if (state == PLAYER_HOST_READY) {
+            int registered = player_host_directory_state();
+            if (registered == 1) {
+                /* Registration has succeeded. The host still needs an
+                   externally reachable TCP 8787 port for remote friends. */
+                enter_room(1, NULL);
+            } else if (registered < 0 || GetTickCount64() - host_boot_started > 12000) {
+                /* The public H-code directory is missing or unavailable.
+                   Switch to a normal Cloudflare private room rather than
+                   showing a code remote friends cannot possibly resolve. */
+                player_host_stop();
+                hosted_mode = 0;
+                if (server()) {
+                    enter_room(1, NULL);
+                    snprintf(status, sizeof status, "Host directory offline - using cloud room");
+                    hle_log("online menu: directory unavailable, using Cloudflare private room\n");
+                } else {
+                    go(HOME);
+                    snprintf(status, sizeof status, "Host directory offline; no cloud server");
+                }
+            } else p->footer = "Registering your host code online...";
+        } else p->footer = "Starting built-in multiplayer server...";
         break;
     }
     case ROOM: {
@@ -691,8 +715,10 @@ static void page_accept(MenuPage *p, int row)
             if (not_ready()) {
                 snprintf(status, sizeof status, "%s", not_ready());
                 hosted_mode = 0;
-            } else if (player_host_start())
+            } else if (player_host_start()) {
+                host_boot_started = GetTickCount64();
                 go(HOST_BOOT);
+            }
             else {
                 snprintf(status, sizeof status, "%.120s", player_host_error());
                 hosted_mode = 0;
