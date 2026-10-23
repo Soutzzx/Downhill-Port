@@ -614,9 +614,10 @@ static uint8_t stick(SHORT v, int flip)
    stick with the arrows then, and the d-pad in menus. */
 static int riding_controls(void) { return *(volatile int32_t *)0x0829E290 != 0; }
 
-/* The keyboard (layout: keyboard.c), only while a window of this process (the game's) is in
-   front, and not while Alt, Ctrl or a Windows key is held, so Alt+Tab, Alt+Enter, Ctrl+Esc and
-   the like stay the system's. A key let go elsewhere is let go here too. */
+/* The keyboard and bound mouse buttons (layout: keyboard.c), only while
+   the game's window has focus. Alt/Windows shortcuts are reserved; CTRL may
+   be bound alone as an action, but Ctrl+other-key combinations are ignored.
+   A key let go elsewhere is let go here too. */
 static void keyboard_merge(HostPad *out)
 {
     uint8_t down[256] = {0};
@@ -624,7 +625,7 @@ static void keyboard_merge(HostPad *out)
     HWND front = GetForegroundWindow();
     if (front) GetWindowThreadProcessId(front, &pid);
     if (front && pid == GetCurrentProcessId() && !(GetAsyncKeyState(VK_MENU) & 0x8000) &&
-        !(GetAsyncKeyState(VK_CONTROL) & 0x8000) && !(GetAsyncKeyState(VK_LWIN) & 0x8000) &&
+        !(GetAsyncKeyState(VK_LWIN) & 0x8000) &&
         !(GetAsyncKeyState(VK_RWIN) & 0x8000)) {
         /* Letters are places on the keyboard, named as on a US one: the key where a US keyboard
            has Z is Square on an AZERTY (W) or QWERTZ (Y) one too. Their scan codes, A to Z: */
@@ -635,6 +636,12 @@ static void keyboard_merge(HostPad *out)
         const uint8_t *keys = keyboard_keys(&count);
         for (int i = 0; i < count; i++) {
             UINT vk = keys[i];
+            /* Support LEFT/RIGHT CTRL as bound actions, but do not interpret
+               Ctrl+letters/arrows as gameplay: those are system/app shortcuts.
+               Mouse buttons are virtual keys and are read directly here too. */
+            if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                vk != VK_LCONTROL && vk != VK_RCONTROL)
+                continue;
             if (vk >= 'A' && vk <= 'Z') {
                 UINT here = MapVirtualKeyExA(us_scan[vk - 'A'], MAPVK_VSC_TO_VK, layout);
                 if (here) vk = here;
