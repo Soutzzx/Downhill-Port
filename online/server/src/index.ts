@@ -25,6 +25,12 @@ export default {
        a JSON-provided address (which could be used for SSRF). */
     const hostCode = path.match(/^\/v1\/player-host\/([23456789ABCDEFGHJKMNPQRSTUVWXYZ]{6})$/);
     if (hostCode && request.method === "GET") {
+      const localPort = Number((env as Env & { DHD_PLAYER_HOST_PORT?: string }).DHD_PLAYER_HOST_PORT || 0);
+      if (localPort >= 1024 && localPort <= 65535) {
+        const local = env.ROOM.get(env.ROOM.idFromName(hostCode[1]));
+        if (await local.isLocalPlayerHostedRoom())
+          return json({ url: `ws://127.0.0.1:${localPort}` });
+      }
       const entry = await env.LOBBIES.get(env.LOBBIES.idFromName("global")).resolvePlayerHost(hostCode[1]);
       return entry ? json(entry) : json({ error: "No active player host" }, 404);
     }
