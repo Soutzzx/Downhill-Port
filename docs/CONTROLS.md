@@ -1,88 +1,97 @@
-# Menu e corrida com teclas independentes (Windows)
+# Controles padrão do Downhill Port (Windows)
 
-O suporte existente a controles Xbox, DualSense, DualShock, Switch Pro e
-controles genéricos não foi alterado. O mouse não é utilizado durante a corrida.
+O teclado tem perfis independentes para **menus** e **corridas**. As configurações
+abaixo são as que passam a vir de fábrica em uma instalação nova, baseadas
+no preset enviado pelo mantenedor. O gamepad SDL3 permanece inalterado.
 
-## Remapeamento dentro do jogo
+## Como configurar dentro do jogo
 
-Abra **OPTIONS > PC SETTINGS > KEYBOARD BINDINGS**.
+Em **OPTIONS > PC SETTINGS > KEYBOARD BINDINGS**, escolha
+**MENU BINDINGS** ou **GAMEPLAY BINDINGS**.
 
-- **MENU BINDINGS:** cima, baixo, esquerda, direita, confirmar, voltar, iniciar e selecionar.
-- **GAMEPLAY BINDINGS:** direção, inclinação, pedal, freio, pausa, manobras, câmera,
-  soco, chute, sprint e derrapagem, divididos em duas páginas.
-- Selecione a ação, solte a tecla de confirmação e pressione a nova tecla.
-- Esc cancela a captura; nos menus, Esc continua sendo uma tecla de segurança
-  para voltar mesmo quando BACK foi remapeada.
-- É permitido usar **a mesma tecla em uma ação de menu e outra de corrida**.
-  Por exemplo: W sobe nos menus e inclina o ciclista na corrida, sem conflito.
-- Duas ações do **mesmo** contexto continuam trocando de tecla em caso de
-  conflito para evitar acionar dois comandos diferentes ao mesmo tempo.
-- Cada grupo tem seu botão de restaurar padrões.
+1. Selecione a ação e confirme.
+2. Solte a tecla usada para confirmar.
+3. Pressione a nova tecla ou botão do mouse (somente GAMEPLAY).
+4. Solte a tecla. A atribuição é salva em `dhd.ini`; Esc cancela a captura.
 
-### Padrões de menu
+É possível repetir uma tecla entre **MENU** e **GAMEPLAY**, sem conflitos entre
+os contextos. Duas ações do mesmo contexto trocam de tecla ao entrar em
+conflito. **Restore Defaults** recupera os padrões listados abaixo.
+
+## Menu: teclas padrão
 
 | Ação | Tecla |
 |---|---|
-| Cima | Seta para cima |
-| Baixo | Seta para baixo |
-| Esquerda | Seta para esquerda |
-| Direita | Seta para direita |
+| Cima | W |
+| Baixo | S |
+| Esquerda | A |
+| Direita | D |
 | Confirmar | Espaço |
-| Voltar | Backspace (Esc também funciona sempre) |
+| Voltar | Backspace |
 | Iniciar | Enter |
 | Selecionar | Tab |
 
-Os padrões de corrida permanecem os da versão anterior, incluindo Esc para
-pausar e as ações alternativas de pedal e freio. Pausa e voltar agora têm
-contextos separados; mudar a pausa na corrida não muda a tecla de voltar do menu.
+Esc também funciona como **Voltar** de segurança, mesmo se Back for alterado.
+O mouse não navega pelos menus: a tentativa anterior de hover/clique direto
+foi removida devido ao desalinhamento do cursor.
 
-## Mouse e Ctrl esquerdo: binds de corrida
+## Corrida: teclas e botões padrão
 
-O mouse **não navega mais pelos menus**. A seleção por ponteiro foi removida
-porque só funcionava em algumas telas e apontava para linhas erradas.
+| Ação | Tecla ou botão |
+|---|---|
+| Virar à esquerda | A |
+| Virar à direita | D |
+| Inclinar para frente | Shift esquerdo |
+| Inclinar para trás | Ctrl esquerdo |
+| Pedalar | Seta para cima |
+| Pedalar (alternativo) | X |
+| Frear | S |
+| Frear (alternativo) | Backspace |
+| Pausar | Esc |
+| Iniciar / pausar | Enter |
+| Câmera / selecionar | Tab |
+| Socar | Botão esquerdo do mouse |
+| Chutar | Botão direito do mouse |
+| Manobra L1 | Q |
+| Manobra R1 | E |
+| Manobra L2 | Z |
+| Manobra R2 | Espaço |
+| Sprint | W |
+| Derrapagem | F |
 
-- Abra OPTIONS > PC SETTINGS > KEYBOARD BINDINGS > GAMEPLAY BINDINGS.
-- Selecione **Punch** ou **Kick**, confirme com a tecla de menu, solte-a e
-  **clique com o botão esquerdo ou direito do mouse**.
-- Os botões esquerdo, direito, central, X1 e X2 são reconhecidos como
-  **MOUSE LEFT**, **MOUSE RIGHT**, **MOUSE MIDDLE**, **MOUSE X1** e **MOUSE X2**.
-- Também é possível selecionar **LEFT CTRL**, **RIGHT CTRL**,
-  **LEFT SHIFT**, **RIGHT SHIFT** e **CAPS LOCK**. As duas teclas Shift são
-  identificadas separadamente; Caps Lock atua quando a tecla é pressionada,
-  não apenas por estar com as letras maiúsculas ativadas.
-- Para atribuir Shift esquerdo ou Caps Lock, selecione uma ação, solte a tecla
-  de confirmação, pressione a tecla desejada e solte-a. As teclas podem ser
-  usadas tanto no MENU quanto em GAMEPLAY.
-- Esses botões são válidos somente para os binds de **GAMEPLAY**.
-  Menu continua usando teclado ou controle, para não perder os atalhos de
-  navegação/confirmar.
-- Os botões físicos do mouse só disparam essas ações **durante a corrida**
-  e **quando a janela do jogo tem foco**.
-- Ctrl+outra tecla é tratado como atalho e as outras teclas desse conjunto não
-  são enviadas ao jogo. Isso evita interferir com Ctrl+Esc e similares.
+Os botões centrais e laterais do mouse também podem ser mapeados
+manualmente para ações de corrida. O leitor de entrada permite combinar
+Ctrl esquerdo com direção, pedal e ataques ao correr. Alt e tecla Windows
+continuam reservados para atalhos do sistema.
 
-Os binds permanecem salvos em `dhd.ini`, com os mesmos índices de gameplay
-(`bind_00` a `bind_18`).
+## Configurações de vídeo padrão
 
-## Configurações antigas preservadas
+- Renderer: native; escala: 2×
+- Display: borderless; tamanho de janela (caso usado): 1280×960
+- Widescreen: ligado; picture: wide; filtro: linear
+- Filmes de abertura: ativados (`skip_movies = 0`)
+- FPS: 60; texturas substitutas: off; fonte: sharp
+- Atualizações: perguntar (`auto_update = ask`)
 
-- `bind_00` até `bind_18` em `dhd.ini` continuam sendo as teclas da **corrida**.
-- `menu_bind_00` até `menu_bind_07` são as novas teclas do **menu**.
-- Sem configuração de menu no arquivo, entram os padrões de seta, Space,
-  Backspace, Enter e Tab.
-- As configurações são salvas em `dhd.ini` junto do `dhd.exe`.
+## Perfis existentes e persistência
 
-## Testes antes da distribuição
+- `bind_00` a `bind_18` são os bindings de corrida.
+- `menu_bind_00` a `menu_bind_07` são os bindings de menu.
+- Um `dhd.ini` existente prevalece sobre os defaults do executável.
+- Variáveis `DHD_*` existentes prevalecem sobre as opções do arquivo.
+- O caminho da ISO não é pré-configurado: cada pessoa seleciona a própria
+  cópia USA compatível de Downhill Domination (SCUS-97177).
 
-Esta alteração ainda precisa ser compilada e testada no Windows:
+## Testes antes de distribuir a nova versão
 
-1. Em GAMEPLAY BINDINGS, alterar Punch para MOUSE RIGHT e Kick para
-   MOUSE LEFT. Confirmar ambas as ações durante uma corrida.
-2. Inverter os dois e confirmar que o jogo troca as teclas sem conflito.
-3. Bindar LEFT CTRL para uma ação de corrida e verificar se ela responde.
-4. Abrir menus e confirmar que nenhum clique no mouse navega ou ativa opções.
-5. Reiniciar o jogo e confirmar a persistência dos binds no dhd.ini.
-6. Confirmar que joystick físico e bindings de MENU continuam funcionando.
-7. Testar jogar com foco fora da janela: mouse e teclas não devem atuar.
+1. Em uma pasta sem `dhd.ini`, verificar WASD no menu e cliques para atacar
+   na corrida.
+2. Testar A/D junto com Ctrl esquerdo para inclinação.
+3. Testar Shift esquerdo com direção e pedalar com a seta para cima.
+4. Reiniciar o jogo para confirmar que as opções persistem.
+5. Modificar uma ação, clicar em **Restore Defaults** e verificar o preset novo.
+6. Confirmar que um `dhd.ini` antigo continua com as teclas escolhidas antes.
+7. Confirmar que a seleção da ISO e o controle físico continuam funcionando.
 
-Não inclui ISO nem outros arquivos do jogo original.
+As alterações precisam de uma nova compilação do port, mas não incluem nem
+distribuem conteúdo do jogo original.

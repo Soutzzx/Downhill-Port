@@ -48,14 +48,14 @@ static const Choice rates[] = {{"60", "60"}, {"120", "120"}, {"144", "144"}, {"M
 enum { RESOLUTION, DISPLAY, WINDOW_SIZE, SHAPE, SCALING, WIDESCREEN, MOVIES, VIBRATION, TEXTURES, FONT };
 static Row rows[ROWS] = {
     {"Resolution:", "scale", "DHD_SCALE", "2", CHOICES(scales), 0},
-    {"Display:", "window", "DHD_WINDOW", "windowed", CHOICES(displays), 1},
-    {"Window Size:", NULL, "DHD_WINDOW_WIDTH", "896x672", CHOICES(sizes), 1},  /* width and height */
-    {"Picture:", "DHD_ASPECT", "DHD_ASPECT", "4:3", CHOICES(shapes), 1},
+    {"Display:", "window", "DHD_WINDOW", "borderless", CHOICES(displays), 1},
+    {"Window Size:", NULL, "DHD_WINDOW_WIDTH", "1280x960", CHOICES(sizes), 1},  /* width and height */
+    {"Picture:", "DHD_ASPECT", "DHD_ASPECT", "wide", CHOICES(shapes), 1},
     {"Scaling:", "DHD_PRESENT_FILTER", "DHD_PRESENT_FILTER", "linear", CHOICES(filters), 1},
     {"Widescreen:", "widescreen", "DHD_WIDESCREEN", "0", CHOICES(switches), 0},
     {"Skip Movies:", "skip_movies", "DHD_SKIP_MOVIES", "0", CHOICES(switches), 1},  /* the startup movies */
     {"Vibration:", "vibration", "DHD_VIBRATION", "1", CHOICES(switches), 1},
-    {"Texture Pack:", "textures", "DHD_TEXTURES", "on", CHOICES(toggles), 0},  /* port/gs/texpack.c */
+    {"Texture Pack:", "textures", "DHD_TEXTURES", "off", CHOICES(toggles), 0},  /* port/gs/texpack.c */
     {"Font:", "font", "DHD_FONT", "sharp", CHOICES(fonts), 0},  /* port/gs/font_sharp.c */
     {"Frame Rate:", "fps", "DHD_FPS", "60", CHOICES(rates), 0},
 };
@@ -157,7 +157,7 @@ static void current(const Row *r, char *out, size_t size)
 {
     if (r == &rows[WINDOW_SIZE]) {
         const char *w = getenv("DHD_WINDOW_WIDTH"), *h = getenv("DHD_WINDOW_HEIGHT");
-        snprintf(out, size, "%dx%d", w && atoi(w) > 0 ? atoi(w) : 896, h && atoi(h) > 0 ? atoi(h) : 672);
+        snprintf(out, size, "%dx%d", w && atoi(w) > 0 ? atoi(w) : 1280, h && atoi(h) > 0 ? atoi(h) : 960);
         return;
     }
     const char *v = getenv(r->env);

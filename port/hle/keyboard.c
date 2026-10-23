@@ -25,28 +25,30 @@ typedef struct {
 } Key;
 
 enum { GAME_KEYS = 19, MENU_KEYS = 8, MAX_TRACKED_KEYS = GAME_KEYS + MENU_KEYS + 1 };
+/* Recommended controls for new installs. Restore Defaults reuses these arrays.
+   Existing saved bind_XX/menu_bind_XX values in dhd.ini always take precedence. */
 static Key game_keys[GAME_KEYS] = {
-    {VK_LEFT_, 0, LEFT_X, -1}, {VK_RIGHT_, 0, LEFT_X, 1},
-    {VK_UP_, 0, LEFT_Y, -1}, {VK_DOWN_, 0, LEFT_Y, 1},
-    {VK_SPACE_, PAD_CROSS}, {'X', PAD_CROSS},
+    {'A', 0, LEFT_X, -1}, {'D', 0, LEFT_X, 1},
+    {VK_LSHIFT, 0, LEFT_Y, -1}, {VK_LCONTROL, 0, LEFT_Y, 1},
+    {VK_UP_, PAD_CROSS}, {'X', PAD_CROSS},
     {'S', PAD_TRIANGLE}, {VK_BACK_, PAD_TRIANGLE},
     {VK_ESCAPE_, PAD_START}, {VK_RETURN_, PAD_START},
-    {VK_TAB_, PAD_SELECT}, {'Z', PAD_SQUARE}, {'C', PAD_CIRCLE},
-    {'A', PAD_L1}, {'D', PAD_R1}, {'Q', PAD_L2}, {'E', PAD_R2},
+    {VK_TAB_, PAD_SELECT}, {VK_LBUTTON, PAD_SQUARE}, {VK_RBUTTON, PAD_CIRCLE},
+    {'Q', PAD_L1}, {'E', PAD_R1}, {'Z', PAD_L2}, {VK_SPACE_, PAD_R2},
     {'W', PAD_R3}, {'F', PAD_L3}
 };
 static Key menu_keys[MENU_KEYS] = {
-    {VK_UP_, PAD_UP}, {VK_DOWN_, PAD_DOWN},
-    {VK_LEFT_, PAD_LEFT}, {VK_RIGHT_, PAD_RIGHT},
+    {'W', PAD_UP}, {'S', PAD_DOWN},
+    {'A', PAD_LEFT}, {'D', PAD_RIGHT},
     {VK_SPACE_, PAD_CROSS}, {VK_BACK_, PAD_TRIANGLE},
     {VK_RETURN_, PAD_START}, {VK_TAB_, PAD_SELECT}
 };
 static const uint8_t game_defaults[GAME_KEYS] = {
-    VK_LEFT_, VK_RIGHT_, VK_UP_, VK_DOWN_, VK_SPACE_, 'X', 'S', VK_BACK_, VK_ESCAPE_,
-    VK_RETURN_, VK_TAB_, 'Z', 'C', 'A', 'D', 'Q', 'E', 'W', 'F'
+    'A', 'D', VK_LSHIFT, VK_LCONTROL, VK_UP_, 'X', 'S', VK_BACK_, VK_ESCAPE_,
+    VK_RETURN_, VK_TAB_, VK_LBUTTON, VK_RBUTTON, 'Q', 'E', 'Z', VK_SPACE_, 'W', 'F'
 };
 static const uint8_t menu_defaults[MENU_KEYS] = {
-    VK_UP_, VK_DOWN_, VK_LEFT_, VK_RIGHT_, VK_SPACE_, VK_BACK_, VK_RETURN_, VK_TAB_
+    'W', 'S', 'A', 'D', VK_SPACE_, VK_BACK_, VK_RETURN_, VK_TAB_
 };
 static const char *const game_actions[GAME_KEYS] = {
     "Steer left", "Steer right", "Lean forward", "Lean back",

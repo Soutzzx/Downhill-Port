@@ -37,21 +37,33 @@ pad has motors. The buttons go by position, as on a PlayStation pad: bottom = Cr
 Circle, left = Square, top = Triangle. A pad SDL doesn't know can be added with a line in SDL's
 format in gamecontrollerdb.txt beside dhd.exe.
 
-No controller? The keyboard plays a whole race (only while the game's window is in front; it
-works together with a controller):
-    Arrow keys       move in menus; steer and lean while riding (they tilt the stick
-                     gradually, so a short tap steers a little and holding steers fully)
-    Space or X       Cross: confirm; pedal (press twice: sprint)
-    Esc, Backspace   Triangle: back in menus. While riding Esc pauses, Backspace brakes
-    S                Triangle: brake (in the air: tweak a trick)
-    Enter            START: start the race on the race setup screen, pause
-    Tab              SELECT: hold + up/down changes the camera, with Q looks back,
-                     press twice to bail out
-    Z / C            Square / Circle: punch / kick
-    A / D            L1 / R1: tricks (both together: Superman)
-    Q / E            L2 / R2: tricks; E (R2) is also bunny hop
-    W                R3: sprint
-    F                L3: powerslide
+No controller? New installations use the maintainer's default mappings.
+They are separated between menus and racing, can be remapped in-game, and
+Restore Defaults restores these keys:
+
+    MENU:
+    W / S / A / D   select up / down / left / right
+    Space           confirm
+    Backspace       back (Esc also backs out)
+    Enter / Tab     start / select
+
+    RACE:
+    A / D           steer left / right
+    Left Shift      lean forward
+    Left Ctrl       lean backward (may be combined with steering/attacks)
+    Up arrow / X    pedal / alternate pedal
+    S / Backspace   brake / alternate brake
+    Esc / Enter     pause / alternate pause
+    Tab             camera / select
+    Mouse Left      punch
+    Mouse Right     kick
+    Q / E           L1 / R1 tricks
+    Z / Space       L2 / R2 tricks
+    W / F           sprint / powerslide
+
+Mouse buttons do not navigate menus. Existing dhd.ini values keep priority over
+these defaults, and mouse/keybind controls do not affect gamepad bindings.
+
 Letters are places on the keyboard as on a US one: on AZERTY or QWERTZ use the keys in the same
 places (e.g. Square is the key left of X, wherever its label says Z, W or Y).
 The game's own controls screen (OPTIONS > CONTROLS) and its trick lists name the PlayStation
@@ -59,7 +71,9 @@ buttons; the keys above stand for them.
 
 Settings: OPTIONS > PC SETTINGS in the game's menu (resolution, display mode, window size,
 picture shape, scaling, widescreen, skip movies, vibration, texture pack, font). Changes are
-saved to dhd.ini at once.
+saved to dhd.ini at once. The default new-install profile is native renderer at 2x,
+borderless, widescreen wide, 1280x960 windowed size, linear filtering, 60 fps,
+movies enabled, texture replacements off and sharp font.
 
 Font: the game's text is drawn with sharp edges at any resolution ("font = sharp", the
 default). The sharp font is made in memory from the font on your disc each time the game
