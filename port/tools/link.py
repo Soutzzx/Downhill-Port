@@ -170,6 +170,7 @@ def runtime():
                  'hle/movie.c',
                  # online races (port/net, finding 042)
                  'net/lockstep.c', 'net/hash.c', 'net/json.c', 'net/client.c', 'net/ws_winhttp.c', 'net/net.c',
+                 'net/player_host.c',
                  # the keyboard and the controllers through SDL3 (finding 059)
                  'hle/keyboard.c', 'hle/text_input.c', 'hle/gamepad.c'):
         o = os.path.join(OUT, name + '.o')

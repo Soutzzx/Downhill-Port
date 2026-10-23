@@ -6,6 +6,7 @@
 #include "menu_page.h"
 #include "text_input.h"
 #include "../net/net.h"
+#include "../net/player_host.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +42,7 @@ static const char code_letters[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  /* the se
 static const char name_letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
 enum { NAME_MAX = 12, CODE_LENGTH = 6, ROW_TEXT = 96, MAX_ROWS = 16, LIST_MAX = 8, MEMBER_ROWS = NET_MAX_SLOTS };
 
-enum { HOME, LIST, NAME, CODE, ROOM };
+enum { HOME, LIST, NAME, CODE, ROOM, HOST_BOOT };
 /* The room's rows */
 enum { R_CODE, R_TRACK, R_BOTS, R_SELECT, R_MEMBER };
 /* Keep player entries consecutive; action rows follow the last joined
@@ -315,7 +316,12 @@ static void go(int to)
     screen = to;
     if (to == NAME || to == CODE) text_input_begin();
     if (to == ROOM) room_focus = selected;
-    if (to == HOME) hosted_mode = 0;
+    if (to == HOME) {
+        /* Closing or cancelling the hosted session always shuts down its
+           relay, even if the menu returned here through an unusual path. */
+        player_host_stop();
+        hosted_mode = 0;
+    }
     status[0] = 0;
     menu_page_rebuild_at(&page, to == HOME ? home_row : 0);
 }
@@ -402,6 +408,10 @@ static void page_build(MenuPage *p)
         menu_page_row(p, text[0], 1);  /* written every frame */
         menu_page_row(p, screen == NAME ? "Done" : "Join", 1);
         break;
+    case HOST_BOOT:
+        p->title = "PLAYER HOSTED";
+        menu_page_row(p, "Cancel", 1);
+        break;
     case ROOM:
         p->title = "RACE ROOM";
         for (int i = 0; i < room_total_rows(); i++) {
@@ -440,6 +450,7 @@ static void room_update(MenuPage *p, NetLobby *l)
                  too_old ? outdated_text : l->error[0] ? l->error : "The connection to the server failed");
         hle_log("online menu: refused: %s (%s)\n", l->error, l->error_code);
         net_leave();
+        player_host_stop(); /* only our local server; public games unaffected */
         reset_selection();
         if (too_old) home_row = HOME_UPDATE;
         if (in_shell) {  /* the rider screen's Back, then ONLINE again with the reason */
@@ -566,6 +577,7 @@ static void leave_room(MenuPage *p)
 {
     hle_log("online menu: leaving the room\n");
     net_leave();
+    player_host_stop(); /* leave also closes all child server processes */
     reset_selection();
     if (in_shell) {
         race = 0;
@@ -609,6 +621,22 @@ static void page_update(MenuPage *p, int cursor)
         if (!status[0])
             p->footer = screen == CODE ? "TYPE/CTRL+V - ENTER JOIN - ESC BACK" : "TYPE OR PAD - ENTER DONE - ESC CANCEL";
         break;
+    case HOST_BOOT: {
+        int state = player_host_state();
+        if (state == PLAYER_HOST_READY) {
+            /* The local /v1/health endpoint is answering: now and only
+               now can /v1/rooms/new succeed. */
+            enter_room(1, NULL);
+        } else if (state == PLAYER_HOST_FAILED) {
+            char reason[200];
+            snprintf(reason, sizeof reason, "%s", player_host_error());
+            player_host_stop();
+            go(HOME);
+            snprintf(status, sizeof status, "%.120s", reason);
+        } else
+            p->footer = "Starting local server (first setup may take time)";
+        break;
+    }
     case ROOM: {
         static NetLobby l;
         net_get_lobby(&l);
@@ -642,11 +670,23 @@ static void page_accept(MenuPage *p, int row)
             go(CODE);
         } else if (row == HOME_HOST) {
             hosted_mode = 1;
-            enter_room(1, NULL);
+            if (not_ready()) {
+                snprintf(status, sizeof status, "%s", not_ready());
+                hosted_mode = 0;
+            } else if (player_host_start())
+                go(HOST_BOOT);
+            else {
+                snprintf(status, sizeof status, "%.120s", player_host_error());
+                hosted_mode = 0;
+            }
         } else if (row == HOME_UPDATE && outdated) {
             hle_log("online menu: Update Now\n");
             update_request();  /* ends the game; the first dhd.exe updates and starts it again */
         }
+        break;
+    case HOST_BOOT:
+        player_host_stop();
+        go(HOME);
         break;
     case LIST:
         if (list_state == 2 && row < list_count && list_count > 0) enter_room(0, list[row].code);
@@ -710,6 +750,10 @@ static void page_back(MenuPage *p)
         break;
     }
     case LIST:
+        go(HOME);
+        break;
+    case HOST_BOOT:
+        player_host_stop();
         go(HOME);
         break;
     case ROOM:
@@ -776,7 +820,11 @@ int port_online_menu(void)
     in_shell = 0;
     hosted_mode = 0;
     run_page();
-    if (!race) { net_leave(); reset_selection(); }
+    if (!race) {
+        net_leave();
+        player_host_stop();
+        reset_selection();
+    }
     return race;
 }
 
@@ -897,6 +945,7 @@ int port_online_shell(void)
     }
     reset_selection();
     net_leave();
+    player_host_stop(); /* player exited hosted race back to single-player */
     selection_end();
     SETUP_WORD(0x10C) = offline_mode;
     SETUP_WORD(0x110) = offline_submode;
