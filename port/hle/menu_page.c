@@ -75,8 +75,11 @@ static void rows(MenuPage *p)
    Row geometry is based on the popup's 640x240 UI layout, mapped to the client
    image. Moving the pointer highlights a row; left click confirms it. */
 static POINT mouse_previous;
-static int mouse_has_previous, mouse_was_down;
-static void slot_accept(void *menu, int index); /* vtable slot implemented below */
+static int mouse_has_previous, mouse_was_down, mouse_was_right;
+static volatile LONG menu_mouse_active;
+int menu_page_mouse_active(void) { return menu_mouse_active != 0; }
+static void slot_accept(void *menu, int index);
+static void slot_back(void *menu); /* vtable slot implemented below */
 
 static int menu_mouse_input(MenuPage *p)
 {
@@ -88,6 +91,7 @@ static int menu_mouse_input(MenuPage *p)
         !GetClassNameA(foreground, cls, sizeof cls) || strcmp(cls, "DHDNativeGS")) {
         mouse_has_previous = 0;
         mouse_was_down = 0;
+        mouse_was_right = 0;
         return 0;
     }
     POINT pos;
@@ -103,8 +107,15 @@ static int menu_mouse_input(MenuPage *p)
     int down = !!(GetAsyncKeyState(VK_LBUTTON) & 0x8000);
     int clicked = down && !mouse_was_down;
     mouse_was_down = down;
-    if ((!moved && !clicked) || !p->armed || keyboard_bind_suppressed())
-        return 0;
+    int right = !!(GetAsyncKeyState(VK_RBUTTON) & 0x8000);
+    int back = right && !mouse_was_right;
+    mouse_was_right = right;
+    if (!p->armed || keyboard_bind_suppressed()) return 0;
+    if (back) {
+        slot_back(p->menu);
+        return 1;
+    }
+    if (!moved && !clicked) return 0;
     if (pos.x < w * 0.06 || pos.x > w * 0.94) return 0;
 
     int n = menu_page_rows(p);
@@ -204,6 +215,8 @@ void menu_page_run(MenuPage *p)
     p->armed = 0;
     mouse_has_previous = 0;
     mouse_was_down = 1; /* a held click that opened the page must be released */
+    mouse_was_right = 1;
+    InterlockedIncrement(&menu_mouse_active);
     if (!p->constructed) {
         memcpy(p->vtable, D_00287218, sizeof p->vtable);  /* {delta, function} pairs, slot 1 on */
         p->vtable[1 * 2 + 1] = (uint32_t)(uintptr_t)slot_build;
@@ -218,6 +231,7 @@ void menu_page_run(MenuPage *p)
     } else
         menu_page_rebuild(p);  /* the rows as they are now, should the game keep the old ones */
     func_00190108(D_003F52D0, p->menu);
+    InterlockedDecrement(&menu_mouse_active);
 }
 
 void menu_page_close(MenuPage *p) { (void)p; func_00190688(D_003F52D0); }
