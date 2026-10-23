@@ -12,6 +12,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <windows.h>
+
+int gs_mouse_wheel_take(void);    /* port/gs/present.c */
+int menu_page_mouse_active(void); /* port/hle/menu_page.c */
 
 enum { VK_BACK_ = 0x08, VK_TAB_ = 0x09, VK_RETURN_ = 0x0D, VK_ESCAPE_ = 0x1B, VK_SPACE_ = 0x20,
        VK_LEFT_ = 0x25, VK_UP_ = 0x26, VK_RIGHT_ = 0x27, VK_DOWN_ = 0x28 };
@@ -222,6 +226,36 @@ static uint8_t ramp_raw(double fraction, int dir)
     return (uint8_t)raw;
 }
 
+/* The original game's title/options menus still use their own selection system.
+   Mouse wheel navigates its currently selected row, left click confirms, right
+   click goes back. Host popup pages do their own cursor hit testing and clicks.
+   No mouse buttons or wheel are sent to gameplay. */
+static int mouse_left_prev, mouse_right_prev;
+static uint16_t keyboard_menu_mouse(int riding)
+{
+    int wheel = gs_mouse_wheel_take();
+    HWND hwnd = GetForegroundWindow();
+    DWORD pid = 0;
+    char cls[64] = "";
+    if (hwnd) GetWindowThreadProcessId(hwnd, &pid);
+    int active = hwnd && pid == GetCurrentProcessId() &&
+                 GetClassNameA(hwnd, cls, sizeof cls) && !strcmp(cls, "DHDNativeGS");
+    int left = active && !!(GetAsyncKeyState(VK_LBUTTON) & 0x8000);
+    int right = active && !!(GetAsyncKeyState(VK_RBUTTON) & 0x8000);
+    uint16_t buttons = 0;
+    if (!riding && active && !suppress_keys) {
+        if (wheel > 0) buttons |= PAD_UP;
+        else if (wheel < 0) buttons |= PAD_DOWN;
+        if (!menu_page_mouse_active()) {
+            if (left && !mouse_left_prev) buttons |= PAD_CROSS;
+            if (right && !mouse_right_prev) buttons |= PAD_TRIANGLE;
+        }
+    }
+    mouse_left_prev = left;
+    mouse_right_prev = right;
+    return buttons;
+}
+
 /* Converts keyboard input into pad input for the active context only.
    Menu UP/DOWN never depends on the gameplay steering bindings. */
 void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
@@ -232,8 +266,9 @@ void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
     };
     uint16_t buttons = 0;
     int dir[3] = {0};
-    if (suppress_keys) { keyboard_reset(); return; }
     riding = !!riding;
+    uint16_t mouse_buttons = keyboard_menu_mouse(riding);
+    if (suppress_keys) { keyboard_reset(); return; }
     if (state.mode >= 0 && state.mode != riding)
         for (int vk = 0; vk < 256; vk++)
             if (down[vk]) state.ignore[vk] = 1;
@@ -269,6 +304,7 @@ void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
         if (axis == LEFT_X) out->left_x = raw;
         else out->left_y = raw;
     }
+    buttons |= mouse_buttons;
     out->buttons |= buttons;
     for (int i = 0; i < 12; i++)
         if (buttons & pressure_order[i]) out->pressure[i] = 255;
