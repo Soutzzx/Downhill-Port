@@ -66,6 +66,19 @@ static void rows(MenuPage *p)
     MENU(p, X_COUNT, int) = 0;
     p->build(p);
 }
+/* The race room has a variable number of visible player rows (2..8).
+   Position those rows within the PS2 menu safe area, above the footer at
+   0xCC. All other popup pages keep their original layout. */
+static void apply_row_layout(MenuPage *p)
+{
+    MENU(p, X_ROW_Y, int) = 0x54;
+    MENU(p, X_ROW_STEP, int) = p->title && !strcmp(p->title, "PC SETTINGS") ? 9 : 10;
+    if (p->title && !strcmp(p->title, "RACE ROOM")) {
+        int n = MENU(p, X_COUNT, int);
+        MENU(p, X_ROW_Y, int) = 0x44;  /* start at 68, below title at 48 */
+        MENU(p, X_ROW_STEP, int) = n >= 13 ? 8 : n >= 11 ? 9 : 10;
+    }
+}
 
 /* ---- the vtable's slots ---- */
 
@@ -80,7 +93,9 @@ static void slot_build(void *menu)  /* slot 1, as func_0015F0C8 */
     /* PC SETTINGS now includes a controls entry: fit twelve rows above the footer. */
     MENU(p, X_ROW_STEP, int) = p->title && !strcmp(p->title, "PC SETTINGS") ? 9 : 10;
     MENU(p, X_ROW_X, int) = half - 0x88;
-    title->x = (short)half; title->y = 0x40; title->placed = 1;
+    title->x = (short)half;
+    title->y = p->title && !strcmp(p->title, "RACE ROOM") ? 0x30 : 0x40;
+    title->placed = 1;
     foot->x = (short)half; foot->y = 0xCC; foot->placed = 1;
     MENU(p, X_4BB, char) = 1;
     MENU(p, X_46C, int) = 1;
@@ -90,6 +105,7 @@ static void slot_build(void *menu)  /* slot 1, as func_0015F0C8 */
     set_text(title, 1, p->title);
     footer(p);
     rows(p);
+    apply_row_layout(p);
     func_001B5AF0(D_003F52D0, 1, 1);
 }
 
@@ -100,6 +116,8 @@ static void slot_update(void *menu)  /* slot 5, as func_0015E750: the page, then
     if (p->rebuild) {
         p->rebuild = 0;
         rows(p);
+        apply_row_layout(p);
+        MENU(p, X_TITLE, Item).y = p->title && !strcmp(p->title, "RACE ROOM") ? 0x30 : 0x40;
         menu_page_set_cursor(p, p->rebuild_row);
     }
     if (p->update) p->update(p, menu_page_cursor(p));
