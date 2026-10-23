@@ -114,7 +114,10 @@ int net_find_player_host(const char *code, char *url, size_t capacity)
     if (!registry || !*registry) registry = getenv("DHD_NET_SERVER");
     if (!url || capacity == 0) return 0;
     url[0] = 0;
-    if (!registry || !*registry || !code || strlen(code) != 6) return 0;
+    /* Ordinary codes take the existing server path without an additional
+       HTTP request. Player Hosted local relays issue H-prefixed codes. */
+    if (!registry || !*registry || !code || strlen(code) != 6 || toupper((unsigned char)code[0]) != 'H')
+        return 0;
     for (const char *c = code; *c; c++)
         if (!strchr("23456789ABCDEFGHJKMNPQRSTUVWXYZ", toupper((unsigned char)*c)))
             return 0;
