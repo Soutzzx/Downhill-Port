@@ -68,6 +68,9 @@ static int in_shell, room_pending, hold_rider, resume_home;
 /* 0 means the existing public server. Hosted mode is used only while
    creating a room on the local relay; code-based joining resolves both. */
 static int hosted_mode;
+/* Track whether the rider screen was really reached; intermediate menu 15
+   is also used while navigating to it and must not close customization. */
+static int visited_rider_screen, host_code_unresolved, host_code_direct;
 enum { HOME_HOST = 5, HOME_UPDATE = 6 };
 static int chosen_rider, chosen_bike, ready_track, ready_options;
 static int public_room, room_settings_sent, room_ready_sent, room_track = 0, room_options;
@@ -317,10 +320,10 @@ static void go(int to)
     if (to == NAME || to == CODE) text_input_begin();
     if (to == ROOM) room_focus = selected;
     if (to == HOME) {
-        /* Closing or cancelling the hosted session always shuts down its
-           relay, even if the menu returned here through an unusual path. */
         player_host_stop();
         hosted_mode = 0;
+        visited_rider_screen = 0;
+        host_code_unresolved = host_code_direct = 0;
     }
     status[0] = 0;
     menu_page_rebuild_at(&page, to == HOME ? home_row : 0);
@@ -348,13 +351,23 @@ static void enter_room(int create, const char *code)
        server, so old private rooms keep working unchanged. */
     if (!create && !hosted_mode) {
         char direct[192];
-        if (net_find_player_host(code, direct, sizeof direct)) {
+        int is_host_code = code && strlen(code) == CODE_LENGTH && code[0] == 'H';
+        host_code_direct = net_find_player_host(code, direct, sizeof direct);
+        host_code_unresolved = is_host_code && !host_code_direct;
+        if (host_code_direct) {
             net_init(direct, name, version, iso_hash);
-            hle_log("online menu: joining player-hosted room %s\n", code);
-        } else
+            hle_log("online menu: resolved Player Hosted code %s to %s\n", code, direct);
+        } else {
+            /* Keep Cloudflare codes starting with H valid, too. Only after
+               a room_not_found error can we know this was not a cloud room. */
             net_init(server(), name, version, iso_hash);
-    } else
+            if (host_code_unresolved)
+                hle_log("online menu: H-code not found in local/public directory (%s)\n", code);
+        }
+    } else {
+        host_code_unresolved = host_code_direct = 0;
         net_init(server(), name, version, iso_hash);
+    }
     if (create) net_create_room();
     else if (net_join_room(code) < 0) {
         snprintf(status, sizeof status, "That code can't be one");
@@ -362,6 +375,7 @@ static void enter_room(int create, const char *code)
     }
     reset_selection();
     choosing = 0;
+    visited_rider_screen = 0;
     selection_requested = 1;
     public_room = !hosted_mode && create == 2;
     room_settings_sent = !create;  /* a guest who becomes host keeps the room as it is */
@@ -448,6 +462,10 @@ static void room_update(MenuPage *p, NetLobby *l)
         if (too_old) outdated = 1;
         snprintf(status, sizeof status, "%s",
                  too_old ? outdated_text : l->error[0] ? l->error : "The connection to the server failed");
+        if (host_code_unresolved && !strcmp(l->error_code, "room_not_found"))
+            snprintf(status, sizeof status, "Host code offline: check directory / host PC");
+        else if (host_code_direct && !too_old)
+            snprintf(status, sizeof status, "Cannot reach host: check TCP 8787 / firewall");
         hle_log("online menu: refused: %s (%s)\n", l->error, l->error_code);
         net_leave();
         player_host_stop(); /* only our local server; public games unaffected */
@@ -602,7 +620,7 @@ static void page_update(MenuPage *p, int cursor)
     switch (screen) {
     case HOME:
         if (!status[0] && cursor == HOME_HOST)
-            p->footer = "Start PlayerHost.cmd on this PC first";
+            p->footer = "Direct hosting: TCP 8787 + public code directory";
         else if (!status[0] && cursor >= 2 && cursor <= 4 && not_ready())
             p->footer = not_ready();
         break;
@@ -812,6 +830,7 @@ int port_online_menu(void)
     page.right = page_right;
     page.title = "ONLINE";
     screen = HOME;
+    visited_rider_screen = 0;
     if (!resumed) {
         home_row = 0;
         status[0] = 0;  /* a room that closed leaves its reason for HOME */
@@ -898,12 +917,19 @@ int port_online_shell(void)
         func_001F79D8(0, 0x3C);  /* the shop's exit faded to black; the level chooser fades back */
         return 1;  /* the main menu next frame: the flight to the rider screen below */
     }
+    /* Reaching the retail rider screen is required before treating the
+       transitional 15/0 menu as 'Back'. Without this guard, clicking Choose
+       immediately reopens RACE ROOM and skips the rider/bike/outfit shop. */
+    if (menu == 3) visited_rider_screen = 1;
     if (room_pending && (menu == 15 || menu == 0)) room_pending = 0;  /* backed out meanwhile */
     if (room_pending) {
         /* The rider screen's own frames put the camera on it; the room's page freezes it. */
         if (menu != 3 || ++room_pending < 45) return 0;
         room_pending = 0;
     } else if (menu == 9 || menu == 15 || menu == 0) {
+        /* These menu IDs also appear *before* the retail rider picker is
+           loaded. Do not steal its input or consider it a selection then. */
+        if (!visited_rider_screen) return 0;
         if (menu == 9 && !lost) keep_selection();
         func_0023D8D8(0, shell_distance, shell_aspect);
         port_online_choose_begin();
@@ -936,6 +962,7 @@ int port_online_shell(void)
         return 1;
     }
     choosing = 0;
+    visited_rider_screen = 0;
     if (race == 1) {
         SHELL_WORD(0x29DED8) = 9;
         SHELL_WORD(0x29DEEC) = 8;
