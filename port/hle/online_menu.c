@@ -316,7 +316,12 @@ static void go(int to)
     screen = to;
     if (to == NAME || to == CODE) text_input_begin();
     if (to == ROOM) room_focus = selected;
-    if (to == HOME) hosted_mode = 0;
+    if (to == HOME) {
+        /* Closing or cancelling the hosted session always shuts down its
+           relay, even if the menu returned here through an unusual path. */
+        player_host_stop();
+        hosted_mode = 0;
+    }
     status[0] = 0;
     menu_page_rebuild_at(&page, to == HOME ? home_row : 0);
 }
