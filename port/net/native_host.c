@@ -16,6 +16,7 @@
 #include <time.h>
 #include "json.h"
 #include "native_host.h"
+#include "nat_forward.h"
 
 enum { HOST_PORT = 8787, CLIENTS = 12, MAX_MEMBERS = 8, IN_CAP = 16384,
        OUT_CAP = 131072, FRAME_CAP = 4096, TICK_MS = 10 };
@@ -635,6 +636,7 @@ int native_host_start(void) {
         fail("Cannot start the local relay thread.");return 0;}
     registrar_stop=CreateEventW(NULL,TRUE,FALSE,NULL);
     if(registrar_stop)registrar_thread=CreateThread(NULL,0,registrar_main,NULL,0,NULL);
+    nat_forward_start(); /* optional UPnP, asynchronous and nonfatal */
     InterlockedExchange(&server_state,NATIVE_HOST_READY);
     return 1;
 }
@@ -648,6 +650,7 @@ int native_host_is_local_code(const char *code){
            code&&strcmp(code,room_code)==0;
 }
 void native_host_stop(void){
+    nat_forward_stop(); /* remove only this game's UPnP mapping */
     InterlockedExchange(&stop_requested,1);
     if(registrar_stop)SetEvent(registrar_stop);
     if(registrar_thread){
