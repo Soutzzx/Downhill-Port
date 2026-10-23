@@ -112,8 +112,15 @@ try {
             'renderer = native'
             'scale = 2'
             'window = borderless'
+            'width = 1280'
+            'height = 960'
             'widescreen = 1'
             'DHD_ASPECT = wide'
+            'DHD_PRESENT_FILTER = linear'
+            'skip_movies = 0'
+            'fps = 60'
+            'textures = off'
+            'font = sharp'
             'auto_update = ask'
             "update_url = $releases/latest/download/latest.json"
         )
