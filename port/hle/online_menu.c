@@ -517,6 +517,7 @@ static void room_update(MenuPage *p, NetLobby *l)
        If a start won the race, the earlier started branch loads the committed selection. */
     if (in && selection_requested && !self_ready) {
         selection_requested = 0;
+        visited_rider_screen = 0; /* each new visit must reach retail picker */
         choosing = 1;
         unlock_all();
         race = 2;
