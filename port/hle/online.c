@@ -25,6 +25,7 @@
 #include "hle.h"
 #include "../gs/present.h"
 #include "../net/net.h"
+#include "../net/player_host.h"
 #include "../include/version.h"
 
 #include <stdarg.h>
@@ -1169,6 +1170,9 @@ static void race_over(void)
 {
     fprintf(stderr, "online: the race is over; back to offline play\n");
     net_leave();
+    /* The native relay belongs to the hosting executable, and must shut
+       down after a real QUIT (but not between hosted race levels). */
+    player_host_stop();
     hle_puppet_offline();
     port_online_relock();
     kernel_pace_shared(0);
