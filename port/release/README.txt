@@ -25,10 +25,11 @@ BINDINGS (steering, pedal, brake, tricks, pause). The same key can have a menu
 and a race action without conflict. Esc always backs out of menus. Settings
 are saved to dhd.ini. The controller input is unchanged.
 
-The mouse operates in MENUS ONLY: wheel navigates; left click confirms
-the currently selected item; right click goes back. In PC SETTINGS and the
-other native popups, hover a row to select it directly. The original game
-menus still use wheel + click. Mouse input does not control the race.
+Mouse bindings work during the race: configure left/right/middle/X1/X2
+buttons under GAMEPLAY BINDINGS (e.g. mouse right = Punch, mouse left = Kick).
+LEFT CTRL and RIGHT CTRL also work as separate keys. Mouse clicking and
+hovering do not navigate menus; the old misaligned menu-mouse handling was
+removed. Use the keyboard or controller for menus.
 
 A controller works out of the box: Xbox pads, DualSense, DualShock 4, Switch Pro, 8BitDo and most
 other USB or Bluetooth pads (through SDL3 and its controller database), with vibration where the

@@ -99,6 +99,14 @@ static int game_focused(void)
 static int capture_down(void)
 {
     if (!game_focused()) return 0;
+    /* Check mouse first: these virtual-key codes are below the old 8..255
+       scan range. Use an edge-free snapshot; capture_phase waits for release. */
+    const int mouse[] = {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2};
+    for (size_t i = 0; i < sizeof mouse / sizeof mouse[0]; i++)
+        if (GetAsyncKeyState(mouse[i]) & 0x8000) return mouse[i];
+    /* Prefer the physical sides of Ctrl over its generic alias. */
+    if (GetAsyncKeyState(VK_LCONTROL) & 0x8000) return VK_LCONTROL;
+    if (GetAsyncKeyState(VK_RCONTROL) & 0x8000) return VK_RCONTROL;
     for (int vk = 8; vk < 255; vk++)
         if ((keyboard_bind_valid(vk) || vk == VK_ESCAPE) && (GetAsyncKeyState(vk) & 0x8000))
             return vk;
@@ -253,19 +261,28 @@ static void page_update(MenuPage *p, int cursor)
             if (capture_phase == 0) {
                 if (!key) capture_phase = 1;
             } else if (capture_phase == 1 && key) {
-                if (key != VK_ESCAPE &&
-                    (capture_menu ? keyboard_menu_set(capture_index, key) :
-                                    keyboard_bind_set(capture_index, key)))
-                    save_bindings();
-                capture_phase = 2;
+                if (key == VK_ESCAPE) {
+                    capture_phase = 2; /* cancel safely */
+                } else if (capture_menu && key >= VK_LBUTTON && key <= VK_XBUTTON2) {
+                    /* Menu actions stay keyboard/controller-only; user can
+                       press another key without leaving the capture screen. */
+                    p->footer = "Mouse buttons: gameplay bindings only";
+                } else {
+                    if (capture_menu ? keyboard_menu_set(capture_index, key) :
+                                       keyboard_bind_set(capture_index, key))
+                        save_bindings();
+                    capture_phase = 2;
+                }
             } else if (capture_phase == 2 && !key) {
                 int index = capture_index;
                 int row = capture_menu || input_view == VIEW_GAME_KEYS_FIRST ? index : index - 10;
                 capture_stop();
                 menu_page_rebuild_at(p, row);
             }
-            p->footer = capture_phase == 0 ? "Release all keys" :
-                        capture_phase == 1 ? "Press a new key, ESC to cancel" : "Release key...";
+            if (!(capture_phase == 1 && key >= VK_LBUTTON &&
+                  key <= VK_XBUTTON2 && capture_menu))
+                p->footer = capture_phase == 0 ? "Release all keys" :
+                            capture_phase == 1 ? "Press key/mouse, Esc cancels" : "Release key...";
         } else if (input_view == VIEW_MENU_KEYS && cursor == keyboard_menu_count()) {
             p->footer = "Gameplay can use the same keys as the menu";
         } else {

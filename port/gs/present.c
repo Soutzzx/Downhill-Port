@@ -24,10 +24,6 @@ static unsigned buffer_width, buffer_height;
 static uint32_t pixels[1024 * 1024];
 static int initialized, disabled, resize_pending;
 static volatile LONG window_closed;
-/* Mouse wheel events are collected on the Win32 window thread. Keyboard/menu
-   input on the game thread consumes them only when menus are open. */
-static volatile LONG mouse_wheel;
-int gs_mouse_wheel_take(void) { return (int)InterlockedExchange(&mouse_wheel, 0); }
 /* Presentation for low latency and variable refresh (round 38, finding 052): a flip-model chain
    that may tear (G-SYNC/FreeSync show each picture when presented; the port's own limiter paces
    them, kernel.c) and holds at most one frame (the frame-latency waitable object, else the
@@ -42,10 +38,6 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
        even when the game's scanout dimensions have not changed. */
     if (msg == WM_CHAR && text_input_active()) { text_input_character((unsigned)wp); return 0; }
     if (msg == WM_KILLFOCUS) text_input_clear();
-    if (msg == WM_MOUSEWHEEL) {
-        InterlockedExchangeAdd(&mouse_wheel, GET_WHEEL_DELTA_WPARAM(wp));
-        return 0;
-    }
     if (msg == WM_SIZE) resize_pending = 1;
     if (msg == WM_CLOSE) { DestroyWindow(hwnd); return 0; }
     if (msg == WM_DESTROY) { PostQuitMessage(0); return 0; }
