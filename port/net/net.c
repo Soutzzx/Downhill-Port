@@ -116,11 +116,21 @@ int net_find_player_host(const char *code, char *url, size_t capacity)
     url[0] = 0;
     /* Ordinary codes take the existing server path without an additional
        HTTP request. Player Hosted local relays issue H-prefixed codes. */
-    if (!registry || !*registry || !code || strlen(code) != 6 || toupper((unsigned char)code[0]) != 'H')
+    if (!code || strlen(code) != 6 || toupper((unsigned char)code[0]) != 'H')
         return 0;
     for (const char *c = code; *c; c++)
         if (!strchr("23456789ABCDEFGHJKMNPQRSTUVWXYZ", toupper((unsigned char)*c)))
             return 0;
+    /* Two EXEs on the same PC can resolve an H-code from the native
+       localhost listener even when no public directory has been deployed. */
+    snprintf(request, sizeof request, "http://127.0.0.1:8787/v1/player-host/%s", code);
+    if (http_get(request, body, sizeof body) > 0 &&
+        json_string(body, "url", resolved, sizeof resolved) &&
+        strlen(resolved) + 1 <= capacity) {
+        snprintf(url, capacity, "%s", resolved);
+        return 1;
+    }
+    if (!registry || !*registry) return 0; /* offline same-PC testing still works */
     snprintf(request, sizeof request, "%s/v1/player-host/%s", registry, code);
     if (http_get(request, body, sizeof body) <= 0 ||
         !json_string(body, "url", resolved, sizeof resolved)) return 0;

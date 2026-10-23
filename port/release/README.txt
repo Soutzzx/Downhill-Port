@@ -117,20 +117,18 @@ with its code. It works out of the box, on the project's official server
 (wss://dhd-online.downhill-revived.workers.dev). Every player needs the same USA disc image,
 and the newest version of the game: an older one is told "A new version is out. Update to play
 online." and offered Update Now.
-Player Hosted (optional): choose ONLINE > Host A Private Game (Your PC).
-The game now starts the local server automatically, invisibly, then opens the
-Race Room. Give friends the six-character code; they still use Join With A Code.
-The local server closes automatically when you leave the hosted game or close
-dhd.exe. No CMD or PowerShell window needs to stay open manually.
-The first hosted game automatically installs a verified portable Node.js LTS
-runtime if needed and installs the local relay dependencies. An internet
-connection is required for this first setup. The release must include
-online/player-host.ps1 and online/server/ beside dhd.exe (build_clean.py
-copies them automatically); copying just dhd.exe is only sufficient for
-single-player or joining, not hosting. Log: %TEMP%\dhd-player-host.log.
-Internet hosting also requires a reachable TCP port 8787 and a deployed room
-code directory; CGNAT may require a public IP or tunnel. Only the host needs
-the local server runtime; other players use Join With A Code normally.
+Player Hosted (optional): ONLINE > Host A Private Game (Your PC).
+A native WebSocket server is now built directly into dhd.exe. It automatically
+starts and creates a private six-character room code. Friends enter via the
+normal ONLINE > Join With A Code; it allows up to 8 players. The host closes
+the server by leaving the room or exiting dhd.exe.
+NO Node.js, npm, PowerShell, scripts, or online/server directory is required
+for hosting. Players need only the released dhd.exe and their own compatible
+USA ISO; the game and its ISO are distributed separately. The original
+Cloudflare online mode continues as before.
+For internet hosting the PC must accept TCP 8787, and the Cloudflare private
+code directory must be deployed with the new endpoints. CGNAT may require a
+public IP or tunnel, and this direct connection does not use TLS.
 
 Running your own dedicated server is optional: put its address on the
 "server =" line of dhd.ini, e.g.
