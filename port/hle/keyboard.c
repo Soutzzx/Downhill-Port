@@ -14,9 +14,6 @@
 #include <string.h>
 #include <windows.h>
 
-int gs_mouse_wheel_take(void);    /* port/gs/present.c */
-int menu_page_mouse_active(void); /* port/hle/menu_page.c */
-
 enum { VK_BACK_ = 0x08, VK_TAB_ = 0x09, VK_RETURN_ = 0x0D, VK_ESCAPE_ = 0x1B, VK_SPACE_ = 0x20,
        VK_LEFT_ = 0x25, VK_UP_ = 0x26, VK_RIGHT_ = 0x27, VK_DOWN_ = 0x28 };
 enum { NO_AXIS, LEFT_X, LEFT_Y };
@@ -77,14 +74,22 @@ const char *keyboard_menu_action(int index)
 {
     return index >= 0 && index < MENU_KEYS ? menu_actions[index] : "";
 }
+/* Gameplay supports mouse buttons and left/right Control as individual keys.
+   Keep generic VK_CONTROL, Alt, Shift and system combinations reserved. */
+static int mouse_button_key(int key)
+{
+    return key == VK_LBUTTON || key == VK_RBUTTON || key == VK_MBUTTON ||
+           key == VK_XBUTTON1 || key == VK_XBUTTON2;
+}
 int keyboard_bind_valid(int key)
 {
+    if (mouse_button_key(key)) return 1;
     if (key < 8 || key >= 255) return 0;
     switch (key) {
-    case VK_ESCAPE_: /* reserved for menu escape during remapping */
-    case 0x10: case 0x11: case 0x12:  /* modifiers */
-    case 0x5B: case 0x5C: case 0x14: case 0x90: /* Win / Caps / Num lock */
-    case 0x01: case 0x02: case 0x04: /* mouse buttons */
+    case VK_ESCAPE_: /* Esc cancels remapping */
+    case VK_SHIFT: case VK_CONTROL: case VK_MENU: /* ambiguous modifiers */
+    case VK_LSHIFT: case VK_RSHIFT: case VK_LMENU: case VK_RMENU:
+    case VK_LWIN: case VK_RWIN: case VK_CAPITAL: case VK_NUMLOCK:
         return 0;
     }
     return 1;
@@ -107,7 +112,12 @@ int keyboard_bind_load(int index, int key)
     }
     return bind_load(game_keys, GAME_KEYS, index, key);
 }
-int keyboard_menu_load(int index, int key) { return bind_load(menu_keys, MENU_KEYS, index, key); }
+/* Mouse buttons are for riding controls; menus retain keyboard/controller input.
+   The same principle applies when reloading settings from dhd.ini. */
+int keyboard_menu_load(int index, int key)
+{
+    return mouse_button_key(key) ? 0 : bind_load(menu_keys, MENU_KEYS, index, key);
+}
 static int bind_set(Key *keys, int count, int index, int key)
 {
     if (index < 0 || index >= count || !keyboard_bind_valid(key)) return 0;
@@ -125,7 +135,10 @@ static int bind_set(Key *keys, int count, int index, int key)
     return 1;
 }
 int keyboard_bind_set(int index, int key) { return bind_set(game_keys, GAME_KEYS, index, key); }
-int keyboard_menu_set(int index, int key) { return bind_set(menu_keys, MENU_KEYS, index, key); }
+int keyboard_menu_set(int index, int key)
+{
+    return mouse_button_key(key) ? 0 : bind_set(menu_keys, MENU_KEYS, index, key);
+}
 void keyboard_bind_defaults(void)
 {
     for (int i = 0; i < GAME_KEYS; i++) game_keys[i].key = game_defaults[i];
@@ -150,6 +163,13 @@ const char *keyboard_bind_name(int key)
     case VK_SPACE_: return "SPACE"; case VK_BACK_: return "BACKSPACE";
     case VK_ESCAPE_: return "ESC"; case VK_RETURN_: return "ENTER";
     case VK_TAB_: return "TAB";
+    case VK_LBUTTON: return "MOUSE LEFT";
+    case VK_RBUTTON: return "MOUSE RIGHT";
+    case VK_MBUTTON: return "MOUSE MIDDLE";
+    case VK_XBUTTON1: return "MOUSE X1";
+    case VK_XBUTTON2: return "MOUSE X2";
+    case VK_LCONTROL: return "LEFT CTRL";
+    case VK_RCONTROL: return "RIGHT CTRL";
     case 0x2E: return "DELETE"; case 0x2D: return "INSERT";
     case 0x24: return "HOME"; case 0x23: return "END";
     case 0x21: return "PAGE UP"; case 0x22: return "PAGE DOWN";
@@ -226,36 +246,6 @@ static uint8_t ramp_raw(double fraction, int dir)
     return (uint8_t)raw;
 }
 
-/* The original game's title/options menus still use their own selection system.
-   Mouse wheel navigates its currently selected row, left click confirms, right
-   click goes back. Host popup pages do their own cursor hit testing and clicks.
-   No mouse buttons or wheel are sent to gameplay. */
-static int mouse_left_prev, mouse_right_prev;
-static uint16_t keyboard_menu_mouse(int riding)
-{
-    int wheel = gs_mouse_wheel_take();
-    HWND hwnd = GetForegroundWindow();
-    DWORD pid = 0;
-    char cls[64] = "";
-    if (hwnd) GetWindowThreadProcessId(hwnd, &pid);
-    int active = hwnd && pid == GetCurrentProcessId() &&
-                 GetClassNameA(hwnd, cls, sizeof cls) && !strcmp(cls, "DHDNativeGS");
-    int left = active && !!(GetAsyncKeyState(VK_LBUTTON) & 0x8000);
-    int right = active && !!(GetAsyncKeyState(VK_RBUTTON) & 0x8000);
-    uint16_t buttons = 0;
-    if (!riding && active && !suppress_keys) {
-        if (wheel > 0) buttons |= PAD_UP;
-        else if (wheel < 0) buttons |= PAD_DOWN;
-        if (!menu_page_mouse_active()) {
-            if (left && !mouse_left_prev) buttons |= PAD_CROSS;
-            if (right && !mouse_right_prev) buttons |= PAD_TRIANGLE;
-        }
-    }
-    mouse_left_prev = left;
-    mouse_right_prev = right;
-    return buttons;
-}
-
 /* Converts keyboard input into pad input for the active context only.
    Menu UP/DOWN never depends on the gameplay steering bindings. */
 void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
@@ -267,7 +257,6 @@ void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
     uint16_t buttons = 0;
     int dir[3] = {0};
     riding = !!riding;
-    uint16_t mouse_buttons = keyboard_menu_mouse(riding);
     if (suppress_keys) { keyboard_reset(); return; }
     if (state.mode >= 0 && state.mode != riding)
         for (int vk = 0; vk < 256; vk++)
@@ -304,7 +293,6 @@ void keyboard_pad(const uint8_t down[256], int riding, double now, HostPad *out)
         if (axis == LEFT_X) out->left_x = raw;
         else out->left_y = raw;
     }
-    buttons |= mouse_buttons;
     out->buttons |= buttons;
     for (int i = 0; i < 12; i++)
         if (buttons & pressure_order[i]) out->pressure[i] = 255;
