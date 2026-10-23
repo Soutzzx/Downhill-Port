@@ -11,10 +11,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
-#include <bcrypt.h>
 
-/* Downhill Domination (USA) SCUS-97177, redump disc 30393 */
-static const char us_iso_sha256[] = "0fe2b77713d3440cc3030741ea0b18f49e3feaa09671a30a421e0d4888a7eb86";
+/* Deterministic online compatibility ID, NOT the hash of the entire ISO.
+   SHA-256 of the ASCII string:
+   DHD-SCUS-97177-compatible-program-sha1:4e25a222ad8a475b5d26c2e928e90b5f2b7075eb
+
+   The retail game's SCUS_971.77 executable is checked by game_data_read()
+   before this ID is sent. This allows ISO dumps with different padding or
+   other disc-level differences to join, without making arbitrary executable
+   variants appear compatible. The wire field remains "isoSha256" until a
+   coordinated server/client protocol upgrade; both clients compare this ID. */
+static const char compatible_program_id[] =
+    "ad32880e6bb3571bddd78cfc134f41d702345dc6d5e7689cec346dda554201ec";
 
 /* The tracks with a 2-4 player level (online.c mp_level) and the riders every save has
    (online.c regular): the game's indexes and names, as the online launcher lists them. */
@@ -192,85 +200,38 @@ static const char *server(void)
     return s && *s ? s : NULL;
 }
 
-/* ---- the ISO check, in a thread ---- */
+/* ---- Check the disc's executable, not the entire ISO, on a worker thread. ---- */
 
-static volatile LONG iso_state;  /* 0 not started, 1 hashing, 2 done, 3 failed */
+static volatile LONG iso_state; /* 0 not started, 1 checking, 2 compatible, 3 rejected */
 static char iso_hash[65];
 
-/* The online launcher's cache: "size:ticks:hash", ticks the file's .NET LastWriteTimeUtc. */
-static void iso_check_path(char *out, size_t size)
-{
-    char exe[MAX_PATH];
-    GetModuleFileNameA(NULL, exe, sizeof exe);
-    char *slash = strrchr(exe, '\\');
-    if (slash) slash[1] = 0;
-    snprintf(out, size, "%siso-check.txt", exe);
-}
-
-static DWORD WINAPI hash_iso(void *arg)
+static DWORD WINAPI check_iso_program(void *arg)
 {
     (void)arg;
     const char *path = getenv("DHD_ISO");
-    WIN32_FILE_ATTRIBUTE_DATA info;
-    char key[64], cache[MAX_PATH], line[160];
-    if (!path || !GetFileAttributesExA(path, GetFileExInfoStandard, &info)) {
+    /* game_data_read verifies SCUS_971.77's size, SHA-1 and exact original
+       program bytes. Other game regions or altered executables cannot use this
+       port safely, even when the file still happens to be named SCUS_971.77.
+       No cache is used: stale iso-check.txt hashes must never bypass checking. */
+    const char *problem = path ? game_data_read(path, NULL) : "No ISO selected.";
+    if (problem) {
+        hle_log("online menu: incompatible ISO: %s\n", problem);
         InterlockedExchange(&iso_state, 3);
         return 0;
     }
-    unsigned long long size = (unsigned long long)info.nFileSizeHigh << 32 | info.nFileSizeLow;
-    unsigned long long ticks = ((unsigned long long)info.ftLastWriteTime.dwHighDateTime << 32 |
-                                info.ftLastWriteTime.dwLowDateTime) + 504911232000000000ull;  /* 1601 -> 0001 */
-    snprintf(key, sizeof key, "%llu:%llu:", size, ticks);
-    iso_check_path(cache, sizeof cache);
-    FILE *f = fopen(cache, "r");
-    if (f) {
-        if (fgets(line, sizeof line, f) && !strncmp(line, key, strlen(key)) && strlen(line + strlen(key)) >= 64) {
-            memcpy(iso_hash, line + strlen(key), 64);
-            iso_hash[64] = 0;
-            fclose(f);
-            InterlockedExchange(&iso_state, 2);
-            return 0;
-        }
-        fclose(f);
-    }
-    hle_log("online menu: checking the ISO's SHA-256\n");
-    BCRYPT_ALG_HANDLE alg;
-    BCRYPT_HASH_HANDLE h;
-    uint8_t digest[32];
-    static uint8_t buf[1 << 20];
-    DWORD n;
-    int ok = 0;
-    HANDLE file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-    if (file != INVALID_HANDLE_VALUE && BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, NULL, 0) == 0) {
-        if (BCryptCreateHash(alg, &h, NULL, 0, NULL, 0, 0) == 0) {
-            while (ReadFile(file, buf, sizeof buf, &n, NULL) && n) BCryptHashData(h, buf, n, 0);
-            ok = BCryptFinishHash(h, digest, sizeof digest, 0) == 0;
-            BCryptDestroyHash(h);
-        }
-        BCryptCloseAlgorithmProvider(alg, 0);
-    }
-    if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
-    if (!ok) {
-        InterlockedExchange(&iso_state, 3);
-        return 0;
-    }
-    for (int i = 0; i < 32; i++) snprintf(iso_hash + 2 * i, 3, "%02x", digest[i]);
-    if ((f = fopen(cache, "w"))) fprintf(f, "%s%s\n", key, iso_hash), fclose(f);
+    snprintf(iso_hash, sizeof iso_hash, "%s", compatible_program_id);
+    hle_log("online menu: compatible SCUS_971.77 executable verified\n");
     InterlockedExchange(&iso_state, 2);
     return 0;
 }
 
 static void start_iso_check(void)
 {
-    const char *given = getenv("DHD_NET_ISO_SHA256");  /* the launcher's, when it started us */
     if (iso_state) return;
-    if (given && strlen(given) == 64) {
-        snprintf(iso_hash, sizeof iso_hash, "%s", given);
-        iso_state = 2;
-        return;
-    }
+    /* Never trust a cached or launcher-provided raw ISO SHA-256: the network
+       comparison now uses the verified executable's compatibility identity. */
     iso_state = 1;
-    HANDLE t = CreateThread(NULL, 0, hash_iso, NULL, 0, NULL);
+    HANDLE t = CreateThread(NULL, 0, check_iso_program, NULL, 0, NULL);
     if (t) CloseHandle(t);
     else iso_state = 3;
 }
@@ -324,9 +285,8 @@ static const char *not_ready(void)
     const char *render = getenv("DHD_RENDER");
     if (!server()) return "No server: set server = ... in dhd.ini";
     if (!render || strcmp(render, "native")) return "Online races need the native renderer";
-    if (iso_state == 1) return "Checking the ISO, a moment...";
-    if (iso_state != 2) return "The ISO couldn't be read";
-    if (strcmp(iso_hash, us_iso_sha256)) return "This ISO isn't the USA disc (SCUS-97177)";
+    if (iso_state == 1) return "Checking game compatibility...";
+    if (iso_state != 2) return "Incompatible game data: USA SCUS-97177 required";
     return NULL;
 }
 
