@@ -163,8 +163,14 @@ or join one from the list or with its code. **Player Hosted** is a new, optional
 private-room mode: a friend runs the local relay, creates a room and shares
 only its six-character code. **Join With A Code** automatically resolves
 both normal and player-hosted rooms; no IP is entered in the game.
-Self-hosting needs Node.js, an accessible TCP port and a public code directory
-deployed from the updated server code. Read
+Selecting **Host A Private Game (Your PC)** automatically starts the local
+server in the background and closes it when the host leaves; no extra CMD
+window is needed. The server's technical output goes to
+`%TEMP%\\dhd-player-host.log`.
+Hosting still requires Node.js 22+ and bundled `online/server` files;
+the standalone `dhd.exe` alone cannot host until a native or portable
+server runtime is packaged. Internet hosting also needs an accessible
+TCP port and a public code directory deployed from the updated server code. Read
 [Player Hosted setup and limitations](docs/PLAYER-HOSTED.md).
 The game uses the project's official server,
 `wss://dhd-online.downhill-revived.workers.dev`. Different ISO dumps can play
