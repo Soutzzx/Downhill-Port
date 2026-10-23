@@ -919,7 +919,17 @@ static void setting(const char *name, const char *value)
 static void apply_setting(const char *key, const char *value)
 {
     if (!_stricmp(key, "game_options")) return; /* read after the game's own boot/load */
-    /* Keyboard binding ids are stable. UI saves them as bind_00 through bind_18. */
+    /* Menu mappings are independent of race controls and saved separately. */
+    if (!_strnicmp(key, "menu_bind_", 10) && strlen(key) == 12 &&
+        key[10] >= '0' && key[10] <= '9' && key[11] >= '0' && key[11] <= '9') {
+        int index = (key[10] - '0') * 10 + key[11] - '0';
+        char *end;
+        long vk = strtol(value, &end, 10);
+        if (end != value && !*end && vk >= 0 && vk < 256)
+            keyboard_menu_load(index, (int)vk);
+        return;
+    }
+    /* Gameplay binding ids are stable. UI saves them as bind_00 through bind_18. */
     if (!_strnicmp(key, "bind_", 5) && strlen(key) == 7 &&
         key[5] >= '0' && key[5] <= '9' && key[6] >= '0' && key[6] <= '9') {
         int index = (key[5] - '0') * 10 + key[6] - '0';
