@@ -11,6 +11,8 @@
 #include "menu_page.h"
 
 #include <string.h>
+#include <windows.h>
+#include <stdlib.h>
 
 /* The game's popup menus (src/unsorted, finding 050) */
 extern char D_003F52D0[];             /* the popup manager: +0x20 its view */
@@ -67,6 +69,64 @@ static void rows(MenuPage *p)
     p->build(p);
 }
 
+/* Mouse input is intentionally limited to native popup-menu pages, never to
+   gameplay camera, steering or buttons. The original game front end draws many
+   non-popup menus; those need separate hit testing and are not handled here.
+   Row geometry is based on the popup's 640x240 UI layout, mapped to the client
+   image. Moving the pointer highlights a row; left click confirms it. */
+static POINT mouse_previous;
+static int mouse_has_previous, mouse_was_down;
+static void slot_accept(void *menu, int index); /* vtable slot implemented below */
+
+static int menu_mouse_input(MenuPage *p)
+{
+    HWND foreground = GetForegroundWindow();
+    char cls[64];
+    DWORD pid = 0;
+    if (foreground) GetWindowThreadProcessId(foreground, &pid);
+    if (!foreground || pid != GetCurrentProcessId() ||
+        !GetClassNameA(foreground, cls, sizeof cls) || strcmp(cls, "DHDNativeGS")) {
+        mouse_has_previous = 0;
+        mouse_was_down = 0;
+        return 0;
+    }
+    POINT pos;
+    RECT rc;
+    if (!GetCursorPos(&pos) || !ScreenToClient(foreground, &pos) ||
+        !GetClientRect(foreground, &rc)) return 0;
+    const int w = rc.right - rc.left, h = rc.bottom - rc.top;
+    if (w < 100 || h < 100) return 0;
+    int moved = mouse_has_previous &&
+                (abs(pos.x - mouse_previous.x) > 3 || abs(pos.y - mouse_previous.y) > 3);
+    mouse_previous = pos;
+    mouse_has_previous = 1;
+    int down = !!(GetAsyncKeyState(VK_LBUTTON) & 0x8000);
+    int clicked = down && !mouse_was_down;
+    mouse_was_down = down;
+    if ((!moved && !clicked) || !p->armed || keyboard_bind_suppressed())
+        return 0;
+    if (pos.x < w * 0.06 || pos.x > w * 0.94) return 0;
+
+    int n = menu_page_rows(p);
+    if (n < 1 || n > 20) return 0;
+    /* The PC-settings popup uses a nine-unit step, other port pages ten. */
+    double spacing = ((double)MENU(p, X_ROW_STEP, int) / 10.0) * h * 0.068;
+    if (spacing < 6.0) return 0;
+    double offset = pos.y - h * 0.11;
+    int row = (int)(offset / spacing + 0.5);
+    if (row < 0 || row >= n) return 0;
+    double distance = offset - row * spacing;
+    if (distance < -spacing * 0.46 || distance > spacing * 0.46) return 0;
+    Item *items = (Item *)((char *)p->menu + X_ITEMS);
+    if (!items[row].enabled) return 0;
+    if (row != menu_page_cursor(p)) menu_page_set_cursor(p, row);
+    if (clicked) {
+        slot_accept(p->menu, row);
+        return 1; /* do not touch a menu after its click may have closed it */
+    }
+    return 0;
+}
+
 /* ---- the vtable's slots ---- */
 
 static void slot_build(void *menu)  /* slot 1, as func_0015F0C8 */
@@ -103,6 +163,7 @@ static void slot_update(void *menu)  /* slot 5, as func_0015E750: the page, then
         menu_page_set_cursor(p, p->rebuild_row);
     }
     if (p->update) p->update(p, menu_page_cursor(p));
+    if (menu_mouse_input(p)) return;
     set_text(&MENU(p, X_TITLE, Item), 1, p->title);
     footer(p);
     func_0018DC20(menu);
@@ -141,6 +202,8 @@ static void slot_right(void *menu, int index)  /* slot 10 */
 void menu_page_run(MenuPage *p)
 {
     p->armed = 0;
+    mouse_has_previous = 0;
+    mouse_was_down = 1; /* a held click that opened the page must be released */
     if (!p->constructed) {
         memcpy(p->vtable, D_00287218, sizeof p->vtable);  /* {delta, function} pairs, slot 1 on */
         p->vtable[1 * 2 + 1] = (uint32_t)(uintptr_t)slot_build;
