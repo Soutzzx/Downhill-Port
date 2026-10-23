@@ -71,6 +71,8 @@ static void rows(MenuPage *p)
    0xCC. All other popup pages keep their original layout. */
 static void apply_row_layout(MenuPage *p)
 {
+    MENU(p, X_ROW_Y, int) = 0x54;
+    MENU(p, X_ROW_STEP, int) = p->title && !strcmp(p->title, "PC SETTINGS") ? 9 : 10;
     if (p->title && !strcmp(p->title, "RACE ROOM")) {
         int n = MENU(p, X_COUNT, int);
         MENU(p, X_ROW_Y, int) = 0x44;  /* start at 68, below title at 48 */
