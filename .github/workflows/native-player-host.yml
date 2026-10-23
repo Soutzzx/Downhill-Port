@@ -7,6 +7,9 @@ on:
       - "port/net/player_host.*"
       - "port/net/native_host_test_main.c"
       - "port/net/test_native_host.py"
+      - "port/net/test_direct_host_contract.py"
+      - "port/hle/online_menu.c"
+      - "online/server/src/index.ts"
       - ".github/workflows/native-player-host.yml"
   workflow_dispatch:
 
@@ -31,3 +34,6 @@ jobs:
       - name: Test WebSocket lobby and race relay
         shell: pwsh
         run: python port/net/test_native_host.py .\native_host_test.exe
+      - name: Verify native host never falls back to cloud race rooms
+        shell: pwsh
+        run: python port/net/test_direct_host_contract.py
