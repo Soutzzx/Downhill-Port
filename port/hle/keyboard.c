@@ -88,9 +88,11 @@ int keyboard_bind_valid(int key)
     switch (key) {
     case VK_ESCAPE_: /* Esc cancels remapping */
     case VK_SHIFT: case VK_CONTROL: case VK_MENU: /* ambiguous modifiers */
-    case VK_LSHIFT: case VK_RSHIFT: case VK_LMENU: case VK_RMENU:
-    case VK_LWIN: case VK_RWIN: case VK_CAPITAL: case VK_NUMLOCK:
+    case VK_LMENU: case VK_RMENU: /* Alt shortcuts stay reserved */
+    case VK_LWIN: case VK_RWIN: case VK_NUMLOCK:
         return 0;
+    /* VK_LSHIFT / VK_RSHIFT are distinct physical keys and VK_CAPITAL
+       represents a Caps Lock press (its toggled state is never used). */
     }
     return 1;
 }
@@ -170,6 +172,9 @@ const char *keyboard_bind_name(int key)
     case VK_XBUTTON2: return "MOUSE X2";
     case VK_LCONTROL: return "LEFT CTRL";
     case VK_RCONTROL: return "RIGHT CTRL";
+    case VK_LSHIFT: return "LEFT SHIFT";
+    case VK_RSHIFT: return "RIGHT SHIFT";
+    case VK_CAPITAL: return "CAPS LOCK";
     case 0x2E: return "DELETE"; case 0x2D: return "INSERT";
     case 0x24: return "HOME"; case 0x23: return "END";
     case 0x21: return "PAGE UP"; case 0x22: return "PAGE DOWN";
