@@ -31,16 +31,21 @@ try {
     }
     Write-Host ''
     Write-Host "Player Hosted is running on this PC, TCP port $Port" -ForegroundColor Green
-    Write-Host 'In Downhill Revived select ONLINE > Host Game On This PC.'
-    Write-Host 'Tell friends your public IP, TCP port, and the in-game room code.'
-    Write-Host 'For internet connections, the router must forward TCP port 8787'
-    Write-Host 'to this computer. CGNAT requires a private VPN or a TCP tunnel.'
-    Write-Host 'Allow Windows Firewall to access the port if prompted.'
-    Write-Host 'Closing this window disconnects everyone.'
+    Write-Host 'In the game select ONLINE > Host A Private Game (Your PC).'
+    Write-Host 'Give your friends ONLY the six-character room code.' -ForegroundColor Green
+    Write-Host 'They can use the normal ONLINE > Join With A Code option.'
     Write-Host ''
-    # --local ensures the race relay actually runs on this machine.
-    # --ip 0.0.0.0 allows remote clients instead of only localhost.
-    & '.\node_modules\.bin\wrangler.cmd' dev --local --ip 0.0.0.0 --port $Port
+    Write-Host 'The central service registers your room code to your public IP.'
+    Write-Host 'For friends outside your network, forward TCP port 8787 to this PC.'
+    Write-Host 'With CGNAT, a tunnel/VPN or relay fallback is required.'
+    Write-Host 'Allow incoming connections in Windows Firewall if prompted.'
+    Write-Host 'The host registration requires the public directory to run'
+    Write-Host 'the latest online/server code from this project.'
+    Write-Host 'Close this window to stop hosting.'
+    Write-Host ''
+    # The local-only port var opts this Worker into the code registry.
+    # --ip 0.0.0.0 accepts friends connecting over the internet.
+    & '.\node_modules\.bin\wrangler.cmd' dev --local --ip 0.0.0.0 --port $Port --var "DHD_PLAYER_HOST_PORT:$Port"
     if ($LASTEXITCODE -ne 0) { throw "The local relay exited with code $LASTEXITCODE." }
 } finally {
     Pop-Location
