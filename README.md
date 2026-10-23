@@ -160,7 +160,12 @@ keys above stand for them.
 
 Online works out of the box: choose ONLINE in the main menu to create a public or private race,
 or join one from the list or with its code. The game uses the project's official server,
-`wss://dhd-online.downhill-revived.workers.dev`. Every player needs the same USA disc image.
+`wss://dhd-online.downhill-revived.workers.dev`. Different ISO dumps can play
+together when they contain the **same verified USA SCUS_971.77 game executable**.
+The online mode no longer requires identical SHA-256 hashes of the entire ISO.
+Images with a changed executable or another region are still unsupported;
+other disc-file changes can still cause missing resources or desyncs. All players
+should use the same newly compiled port version.
 
 Running your own server is optional. `online/server/` is the server (Cloudflare Workers), and
 [online/server/README.md](online/server/README.md) explains how to deploy it. Then put its

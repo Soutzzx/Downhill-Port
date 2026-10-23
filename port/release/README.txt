@@ -8,8 +8,10 @@ each time it starts.
 
 What you need
 - Windows 10 or 11 (64-bit), a graphics card with Direct3D 11.
-- Your own dump of the Downhill Domination USA disc (SCUS-97177) as an .iso file. Other regions
-  and modified images are refused.
+- Your own dump of Downhill Domination USA (SCUS-97177) as an .iso file.
+  The game executable must match the verified USA edition. Disc-level changes
+  such as different padding are allowed, though changed resources may still
+  cause issues. Other regions and modified game executables remain unsupported.
 
 How to play
 1. Unzip this folder anywhere you can write to (not Program Files).
