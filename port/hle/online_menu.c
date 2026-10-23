@@ -71,7 +71,6 @@ static int hosted_mode;
 /* Track whether the rider screen was really reached; intermediate menu 15
    is also used while navigating to it and must not close customization. */
 static int visited_rider_screen, host_code_unresolved, host_code_direct;
-static ULONGLONG host_boot_started;
 enum { HOME_HOST = 5, HOME_UPDATE = 6 };
 static int chosen_rider, chosen_bike, ready_track, ready_options;
 static int public_room, room_settings_sent, room_ready_sent, room_track = 0, room_options;
@@ -579,10 +578,12 @@ static void room_update(MenuPage *p, NetLobby *l)
     }
     /* what to do next, else what everyone waits for */
     if (status[0]) p->footer = status;
+    else if (hosted_mode && in && player_host_directory_state() == -2)
+        p->footer = "H-code rejected: update online directory";
     else if (hosted_mode && in && player_host_directory_state() < 0)
-        p->footer = "H-code not registered: remote join unavailable";
+        p->footer = "H-code offline: check directory/internet";
     else if (hosted_mode && in && !player_host_directory_state())
-        p->footer = "H-code registering; LAN/local joining works";
+        p->footer = "H-code registering; local join still works";
     else if (!in) p->footer = "No connection: Leave Room to give up";
     else if (conflict) p->footer = "Rider taken: change your selection";
     else if (!selected) p->footer = "Choose your rider, bike and outfit first";
@@ -705,7 +706,6 @@ static void page_accept(MenuPage *p, int row)
                 snprintf(status, sizeof status, "%s", not_ready());
                 hosted_mode = 0;
             } else if (player_host_start()) {
-                host_boot_started = GetTickCount64();
                 go(HOST_BOOT);
             }
             else {
