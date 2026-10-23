@@ -63,16 +63,16 @@ $form.Controls.Add($browse)
 
 $scale = New-Choice @(@('1x (the PS2''s own, 512 x 448)', '1'), @('2x (recommended)', '2'), @('3x', '3'), @('4x (sharpest, slower)', '4'), @('Match the window', 'window')) (Get-Setting 'scale' '2')
 Add-Row 'Resolution (native)' $scale
-$window = New-Choice @(@('Window', 'windowed'), @('Borderless (whole screen)', 'borderless'), @('Fullscreen (exclusive)', 'fullscreen')) (Get-Setting 'window' 'windowed')
+$window = New-Choice @(@('Window', 'windowed'), @('Borderless (whole screen)', 'borderless'), @('Fullscreen (exclusive)', 'fullscreen')) (Get-Setting 'window' 'borderless')
 Add-Row 'Display' $window
-$size = New-Choice @(@('896 x 672', '896x672'), @('1280 x 960', '1280x960'), @('1440 x 1080', '1440x1080'), @('1280 x 720', '1280x720'), @('1920 x 1080', '1920x1080')) ('{0}x{1}' -f (Get-Setting 'width' '896'), (Get-Setting 'height' '672'))
+$size = New-Choice @(@('896 x 672', '896x672'), @('1280 x 960', '1280x960'), @('1440 x 1080', '1440x1080'), @('1280 x 720', '1280x720'), @('1920 x 1080', '1920x1080')) ('{0}x{1}' -f (Get-Setting 'width' '1280'), (Get-Setting 'height' '960'))
 Add-Row 'Window size' $size
-$aspect = New-Choice @(@('4:3 (as on a television)', '4:3'), @('16:9', '16:9'), @('Fill the window (stretched)', 'stretch'), @('Square pixels', 'pixels')) (Get-Setting 'DHD_ASPECT' '4:3')
+$aspect = New-Choice @(@('4:3 (as on a television)', '4:3'), @('Wide (monitor-shaped)', 'wide'), @('16:9', '16:9'), @('Fill the window (stretched)', 'stretch'), @('Square pixels', 'pixels')) (Get-Setting 'DHD_ASPECT' 'wide')
 Add-Row 'Picture shape' $aspect
 $filter = New-Choice @(@('Smooth', 'linear'), @('Sharp pixels', 'point')) (Get-Setting 'DHD_PRESENT_FILTER' 'linear')
 Add-Row 'Picture scaling' $filter
 $wide = New-Object System.Windows.Forms.CheckBox
-$wide.Text = 'Widescreen 16:9 (wider view, HUD stretched)'; $wide.Checked = (Get-Setting 'widescreen' '0') -ne '0'; $wide.AutoSize = $true
+$wide.Text = 'Widescreen 16:9 (wider view, HUD stretched)'; $wide.Checked = (Get-Setting 'widescreen' '1') -ne '0'; $wide.AutoSize = $true
 $wide.Add_CheckedChanged({ $aspect.SelectedIndex = if ($wide.Checked) { 1 } else { 0 } })
 Add-Row '' $wide
 
