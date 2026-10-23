@@ -47,20 +47,33 @@ que o port já conhece. **Não é necessário configurar `host_directory` para
 jogar normalmente. NÃO use `host_directory = ws://127.0.0.1:8787` em PCs
 diferentes:** `127.0.0.1` é sempre o próprio computador, e não o do amigo.
 
-O jogo agora confirma que o diretório **aceitou o registro via HTTPS** antes
-de criar a sala direta. Se ele não aceitar (por exemplo, Worker ainda não
-implantado com os endpoints), o modo Host troca automaticamente para uma
-**sala privada Cloudflare**, com o mesmo menu e compartilhamento por código.
-Isso é um fallback de transporte para que os amigos possam jogar; a latência
-continua sendo a do servidor na nuvem nessa situação. O registro da sala
-direta renova aproximadamente a cada 20 segundos e expira após 90 segundos.
-O diretório **não transmite a corrida** quando o host direto está ativo.
+**Player Hosted não faz mais fallback para Cloudflare.** A sala é criada
+imediatamente **no servidor nativo dentro do dhd.exe**, com código sempre
+`Hxxxxx`, mesmo sem conexão com a internet. Esse código funciona em outra
+instância no mesmo PC sem diretório remoto. O diretório online só é necessário
+para um amigo em outra rede encontrar seu endereço público usando esse código.
+
+Se o diretório HTTPS estiver inacessível ou rejeitar o registro, o lobby
+**continua sendo Player Hosted**, mas exibe uma mensagem de diagnóstico
+("H-code rejected"/"H-code offline"). Não se conecta secretamente ao
+servidor de corrida da Cloudflare. Reintenta o registro a cada ~4 segundos e
+renova os registros aceitos aproximadamente a cada 20 segundos. O serviço
+deve estar atualizado com os endpoints de registro e resolução.
+
+O **único** uso da Cloudflare nesse modo, quando o diretório oficial está
+disponível, é o mapeamento de código para endereço IP. **Nenhum ping de
+jogabilidade, bike, pacote ou evento da corrida passa por ela.** Os códigos
+com prefixo H são reservados ao Player Hosted; as novas salas oficiais
+Cloudflare usam outros prefixos.
 
 **Importante:** o sucesso do registro não testa se uma pessoa na internet
 consegue realmente abrir o WebSocket para a porta 8787. Se o diretório
 encontrar `Hxxxxx` mas a conexão não abrir, verifique encaminhamento de
-porta, Firewall do Windows e CGNAT. O jogo passa a mostrar uma mensagem de
-falha de conexão ao host em vez de confundir isso com código inexistente.
+porta, Firewall do Windows e CGNAT. O servidor nativo agora aceita IPv4 e
+IPv6 (quando disponíveis), e usa TCP_NODELAY e polling de 10 ms para reduzir
+o ping. Mesmo assim, o host precisa ter acesso de entrada a essa porta.
+Uma conexão atrás de CGNAT sem rota pública não pode ser corrigida apenas
+com o código da sala.
 
 O anfitrião precisa conseguir receber conexões TCP **8787**. Permita o
 executável no Firewall do Windows e, em IPv4 com NAT, configure o roteador
@@ -73,6 +86,27 @@ A conexão direta usa WebSocket **sem TLS** (`ws://`), e quem obtiver um
 código válido poderá descobrir o IP do host por meio do diretório.
 Hospede apenas com pessoas de confiança até existir autenticação e suporte
 de segurança mais avançado.
+
+## Distinguir diretório, servidor e rota
+
+- **Código Hxxxxx aparece**: a corrida está hospedada no `dhd.exe`. Não
+  há fallback para o relay Cloudflare.
+- **H-code rejected**: o serviço HTTPS respondeu com erro; confira se a
+  versão atual de `online/server/` foi implantada na Cloudflare. Sem
+  diretório o jogador remoto não pode descobrir o IP usando só seis letras.
+- **H-code offline**: conexão HTTPS ou DNS indisponível. O jogo tentará
+  registrar novamente automaticamente enquanto a sala existir.
+- **Amigo consegue resolver o H-code, mas não entrar**: a conexão direta ao
+  host falhou. Teste firewall do Windows, encaminhamento TCP 8787 do
+  roteador, IPv4 público ou conectividade IPv6. CGNAT pode impedir
+  conexões IPv4 de entrada independentemente da qualidade do código.
+- **Código comum (sem H)**: lobby Cloudflare tradicional, independente
+  do Player Hosted.
+
+Este modo não instala regras de firewall nem abre portas do roteador
+automaticamente. Não prometa conexão entre duas redes domésticas sem
+verificar essa condição. A escolha `Host A Private Game` não expõe outros
+serviços além do listener TCP 8787 do jogo.
 
 ## Testar em um computador
 
