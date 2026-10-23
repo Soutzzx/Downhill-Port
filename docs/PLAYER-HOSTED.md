@@ -36,14 +36,20 @@ com `npm ci` quando necessário. Se falhar, o jogo informa o problema;
 as informações técnicas estão em `%TEMP%\\dhd-player-host.log`.
 `PlayerHost.cmd` permanece disponível apenas para testes e depuração manual.
 
-**Limite atual importante:** para hospedar, a máquina ainda precisa de
-**Node.js 22+** e dos arquivos `online/player-host.ps1` e
-`online/server/` (incluindo `package.json`, lockfile e código fonte).
-O `dhd.exe` sozinho **não contém** esse runtime/servidor. O jogo procura
-esses arquivos ao lado do executável ou em pastas pai, facilitando os
-testes a partir do repositório. Uma distribuição pública deve incluir os
-arquivos de host e ter o Node.js instalado/disponível, ou criar um
-empacotamento autossuficiente separado.
+**Primeira execução:** se Node.js 22+ não estiver instalado, o jogo
+automaticamente baixa um **ZIP oficial de Node.js LTS x64** de
+`nodejs.org`, confere o SHA-256 com o manifesto oficial e extrai para
+`%LOCALAPPDATA%\\DownhillRevived\\host-runtime\\node`, sem alterar o
+sistema nem exigir administrador. Também instala as dependências de
+`online/server` com npm, conforme o lockfile. É necessário acesso à
+internet e espaço em disco na primeira hospedagem.
+
+**Empacotamento:** `dhd.exe` ainda precisa estar acompanhado da pasta
+`online` contendo `player-host.ps1` e `server` (fonte, `package.json`,
+`package-lock.json` e `wrangler.jsonc`). O build limpo copia essa pasta
+automaticamente para a pasta de saída. Não precisa distribuir o projeto
+inteiro nem instalar Node manualmente; mas enviar **só o arquivo EXE**
+continua suficiente apenas para **jogar/entrar**, não para hospedar.
 
 Até **8 jogadores**, incluindo o host, utilizando o mesmo protocolo do
 servidor atual. O servidor não renderiza oito jogos: recebe e redistribui
