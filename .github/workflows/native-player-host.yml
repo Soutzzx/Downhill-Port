@@ -1,0 +1,33 @@
+name: Native Player Hosted
+
+on:
+  pull_request:
+    paths:
+      - "port/net/native_host.*"
+      - "port/net/player_host.*"
+      - "port/net/native_host_test_main.c"
+      - "port/net/test_native_host.py"
+      - ".github/workflows/native-player-host.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-host-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build native Windows relay (no ISO needed)
+        shell: cmd
+        run: >
+          cl /nologo /W3 /utf-8 /Fe:native_host_test.exe
+          port/net/native_host_test_main.c
+          port/net/native_host.c
+          port/net/json.c
+          ws2_32.lib winhttp.lib bcrypt.lib
+      - name: Test WebSocket lobby and race relay
+        shell: pwsh
+        run: python port/net/test_native_host.py .\native_host_test.exe
