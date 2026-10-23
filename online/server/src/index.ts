@@ -74,7 +74,12 @@ export default {
       if (m[1] === "new") {
         headers.set("x-dhd-create", "1");
         for (let attempt = 0; attempt < 8; attempt++) {
-          const code = randomCode();
+          /* Local Player Hosted rooms use Hxxxxx codes to avoid forcing
+             every ordinary Cloudflare private-room join through a second
+             directory lookup. They are still six standard characters. */
+          const localHost = (env as Env & { DHD_PLAYER_HOST_PORT?: string }).DHD_PLAYER_HOST_PORT;
+          const random = randomCode();
+          const code = localHost ? "H" + random.slice(1) : random;
           const room = env.ROOM.get(env.ROOM.idFromName(code));
           if (await room.claim(code)) return room.fetch(new Request(request, { headers }));
         }
