@@ -583,18 +583,43 @@ int native_host_start(void) {
     native_host_stop();
     WSADATA data;
     if(WSAStartup(MAKEWORD(2,2),&data)!=0){fail("Winsock startup failed.");return 0;}
-    listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
-    if(listener==INVALID_SOCKET){fail("Cannot create a TCP socket.");WSACleanup();return 0;}
-    struct sockaddr_in addr;
-    memset(&addr,0,sizeof addr);
-    addr.sin_family=AF_INET;addr.sin_addr.s_addr=htonl(INADDR_ANY);
-    addr.sin_port=htons(HOST_PORT);
-    int exclusive=1;
-    setsockopt(listener,SOL_SOCKET,SO_EXCLUSIVEADDRUSE,(char*)&exclusive,sizeof exclusive);
-    if(bind(listener,(const struct sockaddr*)&addr,sizeof addr)==SOCKET_ERROR||
-       listen(listener,SOMAXCONN)==SOCKET_ERROR){
-        closesocket(listener);listener=INVALID_SOCKET;WSACleanup();
-        fail("TCP 8787 is busy or blocked. Close PlayerHost.cmd first.");
+    /* CF-Connecting-IP can be IPv6. The old listener was IPv4-only,
+       so the directory could register a valid IPv6 address that no guest
+       could ever reach. Prefer one IPv6 dual-stack socket, falling back
+       to IPv4 on Windows networks without IPv6 support. */
+    int bound=0, exclusive=1;
+    listener=socket(AF_INET6,SOCK_STREAM,IPPROTO_TCP);
+    if(listener!=INVALID_SOCKET){
+        DWORD v6only=0;
+        struct sockaddr_in6 addr6;
+        memset(&addr6,0,sizeof addr6);
+        addr6.sin6_family=AF_INET6;
+        addr6.sin6_port=htons(HOST_PORT);
+        setsockopt(listener,SOL_SOCKET,SO_EXCLUSIVEADDRUSE,
+                   (const char*)&exclusive,sizeof exclusive);
+        if(setsockopt(listener,IPPROTO_IPV6,IPV6_V6ONLY,
+                      (const char*)&v6only,sizeof v6only)==0 &&
+           bind(listener,(const struct sockaddr*)&addr6,sizeof addr6)==0 &&
+           listen(listener,SOMAXCONN)==0) bound=1;
+        if(!bound){closesocket(listener);listener=INVALID_SOCKET;}
+    }
+    if(!bound){
+        struct sockaddr_in addr4;
+        memset(&addr4,0,sizeof addr4);
+        addr4.sin_family=AF_INET;addr4.sin_addr.s_addr=htonl(INADDR_ANY);
+        addr4.sin_port=htons(HOST_PORT);
+        listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+        if(listener!=INVALID_SOCKET){
+            setsockopt(listener,SOL_SOCKET,SO_EXCLUSIVEADDRUSE,
+                       (const char*)&exclusive,sizeof exclusive);
+            if(bind(listener,(const struct sockaddr*)&addr4,sizeof addr4)==0 &&
+               listen(listener,SOMAXCONN)==0) bound=1;
+        }
+    }
+    if(!bound){
+        if(listener!=INVALID_SOCKET)closesocket(listener);
+        listener=INVALID_SOCKET;WSACleanup();
+        fail("TCP 8787 is busy or blocked. Close any older host first.");
         return 0;
     }
     u_long asynchronous=1;ioctlsocket(listener,FIONBIO,&asynchronous);
