@@ -46,9 +46,13 @@ porque só funcionava em algumas telas e apontava para linhas erradas.
   **clique com o botão esquerdo ou direito do mouse**.
 - Os botões esquerdo, direito, central, X1 e X2 são reconhecidos como
   **MOUSE LEFT**, **MOUSE RIGHT**, **MOUSE MIDDLE**, **MOUSE X1** e **MOUSE X2**.
-- Também é possível selecionar **LEFT CTRL** e **RIGHT CTRL**.
-  Ctrl esquerdo é identificado separadamente, e o leitor de entrada não bloqueia
-  mais seu uso como comando de corrida.
+- Também é possível selecionar **LEFT CTRL**, **RIGHT CTRL**,
+  **LEFT SHIFT**, **RIGHT SHIFT** e **CAPS LOCK**. As duas teclas Shift são
+  identificadas separadamente; Caps Lock atua quando a tecla é pressionada,
+  não apenas por estar com as letras maiúsculas ativadas.
+- Para atribuir Shift esquerdo ou Caps Lock, selecione uma ação, solte a tecla
+  de confirmação, pressione a tecla desejada e solte-a. As teclas podem ser
+  usadas tanto no MENU quanto em GAMEPLAY.
 - Esses botões são válidos somente para os binds de **GAMEPLAY**.
   Menu continua usando teclado ou controle, para não perder os atalhos de
   navegação/confirmar.
