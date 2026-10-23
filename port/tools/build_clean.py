@@ -58,6 +58,33 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+
+def sync_generated_inputs(source, destination):
+    """Synchronize local generated PS2 inputs without deleting whole directories.
+
+    Windows/OneDrive can recreate a file while shutil.rmtree() is still
+    traversing a folder, causing WinError 145. The worktree's compiled object
+    files are outside these folders and must remain available for
+    --skip-compile. Overlay changed/missing generated files, then remove only
+    stale individual files. Empty directories are harmless.
+    """
+    def copy_if_changed(src, dst):
+        source_stat = Path(src).stat()
+        existing = Path(dst)
+        if existing.is_file():
+            current_stat = existing.stat()
+            if (source_stat.st_size == current_stat.st_size and
+                    source_stat.st_mtime_ns == current_stat.st_mtime_ns):
+                return dst
+        return shutil.copy2(src, dst)
+
+    shutil.copytree(source, destination, dirs_exist_ok=True,
+                    copy_function=copy_if_changed)
+    for existing in destination.rglob('*'):
+        if existing.is_file() and not (source / existing.relative_to(destination)).is_file():
+            existing.unlink()
+
+
 def prepare_tree(rev):
     commit = git('rev-parse', rev)
     if not (TREE / '.git').exists():
@@ -71,9 +98,7 @@ def prepare_tree(rev):
         link, target = TREE / name, ROOT / name
         if not target.exists():
             sys.exit('missing %s (see docs/STATE.md, Environment)' % target)
-        if link.exists():
-            shutil.rmtree(link)
-        shutil.copytree(target, link)
+        sync_generated_inputs(target, link)
     if not (ROOT / ELF).exists():
         sys.exit('missing %s (see docs/STATE.md, Environment)' % (ROOT / ELF))
     (TREE / ELF).parent.mkdir(exist_ok=True)
