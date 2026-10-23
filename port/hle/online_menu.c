@@ -43,7 +43,14 @@ enum { NAME_MAX = 12, CODE_LENGTH = 6, ROW_TEXT = 96, MAX_ROWS = 16, LIST_MAX = 
 
 enum { HOME, LIST, NAME, CODE, ROOM };
 /* The room's rows */
-enum { R_CODE, R_TRACK, R_BOTS, R_SELECT, R_MEMBER, R_READY = R_MEMBER + MEMBER_ROWS, R_START, R_LEAVE, R_ROWS };
+enum { R_CODE, R_TRACK, R_BOTS, R_SELECT, R_MEMBER };
+/* Keep player entries consecutive; action rows follow the last joined
+   player instead of eight empty slots. 8 + 4 + 3 = 15 rows maximum. */
+static int room_members;
+static int room_ready_row(void) { return R_MEMBER + room_members; }
+static int room_start_row(void) { return room_ready_row() + 1; }
+static int room_leave_row(void) { return room_ready_row() + 2; }
+static int room_total_rows(void) { return room_ready_row() + 3; }
 /* The room's options, carried in the server's "laps" setting (Downhill Domination has no laps):
    every PC builds the same race from them (online.c hle_online_ai_count). */
 enum { ROOM_NO_BOTS = 1 };
@@ -187,6 +194,7 @@ static void reset_selection(void)
 {
     selected = selection_requested = room_focus = 0;
     room_settings_sent = room_ready_sent = 0;
+    room_members = 0;
 }
 
 static char text[MAX_ROWS][ROW_TEXT], status[128], footer[128];
@@ -378,9 +386,10 @@ static void page_build(MenuPage *p)
         break;
     case ROOM:
         p->title = "RACE ROOM";
-        for (int i = 0; i < R_ROWS; i++) {
+        for (int i = 0; i < room_total_rows(); i++) {
             text[i][0] = 0;
-            menu_page_row(p, text[i], i == R_SELECT || i == R_READY || i == R_START || i == R_LEAVE);
+            menu_page_row(p, text[i], i == R_SELECT || i == room_ready_row() ||
+                                       i == room_start_row() || i == room_leave_row());
         }
         break;
     }
@@ -399,6 +408,13 @@ static void entry_text(void)
 
 static void room_update(MenuPage *p, NetLobby *l)
 {
+    /* Reflow as players join or leave. Ready/Start/Leave always appear
+       immediately after the final occupied member slot. */
+    int count = l->nmembers < 0 ? 0 : l->nmembers > MEMBER_ROWS ? MEMBER_ROWS : l->nmembers;
+    if (count != room_members) {
+        room_members = count;
+        menu_page_rebuild_at(p, R_SELECT);
+    }
     if (l->state == NET_FAILED || l->state == NET_IDLE) {
         int too_old = !strcmp(l->error_code, "client_outdated");
         if (too_old) outdated = 1;
@@ -494,17 +510,17 @@ static void room_update(MenuPage *p, NetLobby *l)
                  m->rider >= 1 && m->rider <= 16 ? rider_names[m->rider - 1] : "", m->ready ? "  READY" : "", ping);
     }
     int missing = (l->nmembers < 2 ? 2 : l->nmembers) - ready;
-    snprintf(text[R_READY], ROW_TEXT, "%s", own_ready ? "Not Ready" : "Ready");
-    snprintf(text[R_START], ROW_TEXT, "%s", l->is_host ? "Start The Race" : "The host starts the race");
-    snprintf(text[R_LEAVE], ROW_TEXT, "Leave Room");
+    snprintf(text[room_ready_row()], ROW_TEXT, "%s", own_ready ? "Not Ready" : "Ready");
+    snprintf(text[room_start_row()], ROW_TEXT, "%s", l->is_host ? "Start The Race" : "The host starts the race");
+    snprintf(text[room_leave_row()], ROW_TEXT, "Leave Room");
     menu_page_enable(p, R_TRACK, in && l->is_host);
     menu_page_enable(p, R_BOTS, in && l->is_host);
     menu_page_enable(p, R_SELECT, in);
-    menu_page_enable(p, R_READY, in && selected && !conflict);
-    menu_page_enable(p, R_START, can_start);
-    menu_page_enable(p, R_LEAVE, 1);
+    menu_page_enable(p, room_ready_row(), in && selected && !conflict);
+    menu_page_enable(p, room_start_row(), can_start);
+    menu_page_enable(p, room_leave_row(), 1);
     if (room_focus) {
-        menu_page_set_cursor(p, conflict ? R_SELECT : R_READY);
+        menu_page_set_cursor(p, conflict ? R_SELECT : room_ready_row());
         room_focus = 0;
     }
     /* what to do next, else what everyone waits for */
@@ -645,11 +661,11 @@ static void page_accept(MenuPage *p, int row)
         if (row == R_SELECT) {
             net_set_ready(0);
             selection_requested = 1;
-        } else if (row == R_READY && !strcmp(text[R_READY], "Not Ready"))  /* the label shows the last snapshot */
+        } else if (row == room_ready_row() && !strcmp(text[room_ready_row()], "Not Ready"))  /* the label shows the last snapshot */
             net_set_ready(0);
-        else if (row == R_READY) { ready_track = l.track, ready_options = l.laps; net_set_ready(1); }
-        else if (row == R_START && l.is_host) net_start_race();
-        else if (row == R_LEAVE) leave_room(p);
+        else if (row == room_ready_row()) { ready_track = l.track, ready_options = l.laps; net_set_ready(1); }
+        else if (row == room_start_row() && l.is_host) net_start_race();
+        else if (row == room_leave_row()) leave_room(p);
         break;
     }
     }
