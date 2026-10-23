@@ -91,8 +91,11 @@ typedef struct {
     int track, players, max_players;
 } NetLobbyInfo;
 
-/* base_url: "wss://host" or "ws://127.0.0.1:8787". version: the build's version string (the
-   server refuses players whose version differs from the host's). iso_sha256: 64 lowercase hex. */
+/* base_url: "wss://host" or "ws://127.0.0.1:8787". version: the build's
+   version string (the server refuses players whose version differs from the
+   host's). iso_sha256: the 64-hex compatibility identifier of the validated
+   SCUS_971.77 executable. The legacy wire field is still named isoSha256,
+   but this is no longer a hash of the full ISO file. */
 void net_init(const char *base_url, const char *name, const char *version, const char *iso_sha256);
 int net_create_room(void);
 int net_join_room(const char *code);   /* -1 when the code can't be one */
