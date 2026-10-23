@@ -509,48 +509,61 @@ static DWORD WINAPI server_main(void *arg) {
    but race packets never pass through it. HTTPS registration uses the
    host's public source IP; every connection to the local relay is direct. */
 static HANDLE registrar_thread, registrar_stop;
-static void directory_register(void) {
+/* 0 waiting, 1 public directory accepted, -1 public directory unavailable.
+   This is NOT a firewall/CGNAT reachability probe; it checks code discovery. */
+static volatile LONG directory_state;
+static int directory_register(void) {
     const char *custom = getenv("DHD_HOST_DIRECTORY");
     const char *base = custom && *custom ? custom :
         "https://dhd-online.downhill-revived.workers.dev";
     char uri[350];
     if (!strncmp(base,"wss://",6)) snprintf(uri,sizeof uri,"https://%s/v1/player-host/register",base+6);
     else if (!strncmp(base,"https://",8)) snprintf(uri,sizeof uri,"%s/v1/player-host/register",base);
-    else return; /* private directory over plaintext is never used */
+    else return 0; /* private directory over plaintext is never used */
     wchar_t wide[400],host[256],path[256];
     MultiByteToWideChar(CP_UTF8,0,uri,-1,wide,400);
     URL_COMPONENTS u;
     memset(&u,0,sizeof u);u.dwStructSize=sizeof u;
     u.lpszHostName=host;u.dwHostNameLength=256;
     u.lpszUrlPath=path;u.dwUrlPathLength=256;
-    if(!WinHttpCrackUrl(wide,0,0,&u)||u.nScheme!=INTERNET_SCHEME_HTTPS)return;
+    if(!WinHttpCrackUrl(wide,0,0,&u)||u.nScheme!=INTERNET_SCHEME_HTTPS)return 0;
     char payload[190];
     snprintf(payload,sizeof payload,"{\"code\":\"%s\",\"port\":8787,\"token\":\"%s\"}",
              room_code,host_token);
     HINTERNET ses=WinHttpOpen(L"Downhill Revived native host",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
-    if(!ses)return;
-    WinHttpSetTimeouts(ses,3000,3000,5000,5000);
+    if(!ses)return 0;
+    WinHttpSetTimeouts(ses,2500,2500,3500,3500);
     HINTERNET conn=WinHttpConnect(ses,host,u.nPort,0);
     HINTERNET req=conn?WinHttpOpenRequest(conn,L"POST",path,NULL,WINHTTP_NO_REFERER,
                          WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE):NULL;
+    int success=0;
     if(req){
         static const wchar_t hdr[]=L"Content-Type: application/json\r\n";
         if(WinHttpSendRequest(req,hdr,(DWORD)-1,payload,(DWORD)strlen(payload),
-                               (DWORD)strlen(payload),0)) {
-            WinHttpReceiveResponse(req,NULL);
+                               (DWORD)strlen(payload),0) && WinHttpReceiveResponse(req,NULL)) {
+            DWORD status=0,size=sizeof status;
+            if(WinHttpQueryHeaders(req,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,
+                                   WINHTTP_HEADER_NAME_BY_INDEX,&status,&size,
+                                   WINHTTP_NO_HEADER_INDEX) && status==200)
+                success=1;
         }
         WinHttpCloseHandle(req);
     }
     if(conn)WinHttpCloseHandle(conn);
     WinHttpCloseHandle(ses);
+    return success;
 }
 static DWORD WINAPI registrar_main(void *unused) {
     (void)unused;
-    while(WaitForSingleObject(registrar_stop,1000)==WAIT_TIMEOUT) {
-        if(member_count>0 && now_ms()-last_register>20000) {
+    /* Register before the host creates its lobby. That way the Online menu
+       can detect a missing/old directory and offer a Cloudflare fallback
+       rather than displaying an unusable H-code. Renew the lease afterward. */
+    while(WaitForSingleObject(registrar_stop,500)==WAIT_TIMEOUT) {
+        if(now_ms()-last_register>20000 || !last_register) {
             last_register=now_ms();
-            directory_register();
+            int okay=directory_register();
+            InterlockedExchange(&directory_state,okay?1:-1);
         }
     }
     return 0;
@@ -579,6 +592,7 @@ int native_host_start(void) {
     member_count=next_id=track=laps=racing=0;host_id=-1;
     max_players=8;build_version[0]=iso_id[0]=0;
     last_ping=now_ms();last_register=0;
+    InterlockedExchange(&directory_state,0);
     InterlockedExchange(&stop_requested,0);
     make_code();
     if(!room_code[0])return 0;
@@ -592,6 +606,9 @@ int native_host_start(void) {
 }
 int native_host_state(void){return InterlockedCompareExchange(&server_state,0,0);}
 const char *native_host_error(void){return error_message;}
+int native_host_directory_state(void) {
+    return (int)InterlockedCompareExchange(&directory_state,0,0);
+}
 int native_host_is_local_code(const char *code){
     return native_host_state()==NATIVE_HOST_READY&&member_count>0&&
            code&&strcmp(code,room_code)==0;
@@ -609,5 +626,6 @@ void native_host_stop(void){
         CloseHandle(worker);worker=NULL;
     }
     if(listener!=INVALID_SOCKET){closesocket(listener);listener=INVALID_SOCKET;WSACleanup();}
+    InterlockedExchange(&directory_state,0);
     InterlockedExchange(&server_state,NATIVE_HOST_STOPPED);
 }

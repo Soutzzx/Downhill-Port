@@ -43,8 +43,24 @@ Ele tem os endpoints:
 
 O serviço Cloudflare escolhido em `host_directory` no `dhd.ini` precisa
 **estar implantado com esses endpoints**. Por padrão usa o endpoint oficial
-que o port já conhece. O registro renova aproximadamente a cada 20 segundos
-e expira após 90 segundos sem atualização. **Não transmite a corrida.**
+que o port já conhece. **Não é necessário configurar `host_directory` para
+jogar normalmente. NÃO use `host_directory = ws://127.0.0.1:8787` em PCs
+diferentes:** `127.0.0.1` é sempre o próprio computador, e não o do amigo.
+
+O jogo agora confirma que o diretório **aceitou o registro via HTTPS** antes
+de criar a sala direta. Se ele não aceitar (por exemplo, Worker ainda não
+implantado com os endpoints), o modo Host troca automaticamente para uma
+**sala privada Cloudflare**, com o mesmo menu e compartilhamento por código.
+Isso é um fallback de transporte para que os amigos possam jogar; a latência
+continua sendo a do servidor na nuvem nessa situação. O registro da sala
+direta renova aproximadamente a cada 20 segundos e expira após 90 segundos.
+O diretório **não transmite a corrida** quando o host direto está ativo.
+
+**Importante:** o sucesso do registro não testa se uma pessoa na internet
+consegue realmente abrir o WebSocket para a porta 8787. Se o diretório
+encontrar `Hxxxxx` mas a conexão não abrir, verifique encaminhamento de
+porta, Firewall do Windows e CGNAT. O jogo passa a mostrar uma mensagem de
+falha de conexão ao host em vez de confundir isso com código inexistente.
 
 O anfitrião precisa conseguir receber conexões TCP **8787**. Permita o
 executável no Firewall do Windows e, em IPv4 com NAT, configure o roteador
@@ -69,7 +85,9 @@ testar com duas instâncias do jogo no mesmo Windows:
 3. Use **ONLINE > Join With A Code** e digite o código. O cliente consulta
    primeiro o servidor nativo em `127.0.0.1:8787`; só depois tenta o
    diretório externo. Não precisa preencher IP nem iniciar CMD.
-4. Teste seleção de jogador, Ready, Start, corrida e saída da sala.
+4. Teste seleção original de personagem, bike e roupa antes do Ready,
+   depois Start, corrida e saída da sala. Ao terminar, teste **New Level** e
+   **Try Again** pelo anfitrião sem desconectar os convidados.
 5. Confirme que a porta 8787 deixa de responder após o anfitrião sair.
 
 ## Servidor público
