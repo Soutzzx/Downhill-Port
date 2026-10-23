@@ -1065,7 +1065,9 @@ void hle_online_restart(void)
     }
     on.restart_accepted = 1;
     on.rematch_want = on.rematch_fields = 0;
-    on.rematch_at = 0;
+    /* Keep a transition deadline while retail changes tracks. It temporarily
+       leaves the race menu and must NOT tear down all multiplayer sockets. */
+    on.rematch_at = host_wall_seconds();
     if (on.local_slot == on.host_slot && others_here()) {
         int track = EE32(SETUP + 0x2A0);
         uint8_t e[4] = {EVENT_VERSION, EVENT_REMATCH, (uint8_t)(track != on.setup.track), (uint8_t)track};
@@ -1087,11 +1089,18 @@ void hle_online_restart_ready(void)
 static int rematch_step(void)
 {
     if (!on.rematch_want) return 0;
-    if (!others_here() || ++on.rematch_fields > 1800 || host_wall_seconds() - on.rematch_at > 30) {
-        fprintf(stderr, "online: stopped following the host's stale restart request\n");
+    /* A peer's menu/fade can take longer than the host's, especially over
+       the internet. The previous 30-second timeout called race_over(),
+       disconnecting that peer instead of following the new level. */
+    if (!others_here()) {
+        fprintf(stderr, "online: rematch aborted: host/peers disconnected\n");
         on.rematch_want = on.rematch_fields = 0;
-        on.rematch_at = 0;
-        return 1;
+        return 0;
+    }
+    if (++on.rematch_fields > 7200 || host_wall_seconds() - on.rematch_at > 120) {
+        fprintf(stderr, "online: could not follow new level automatically; connection stays active\n");
+        on.rematch_want = on.rematch_fields = 0;
+        return 0;
     }
     return 0;
 }
@@ -1218,7 +1227,13 @@ void pads_begin_field(void)
         write_setup(&s);
     }
     if (rematch_step()) { race_over(); return; }
-    if (on.started && EE32(MENU) != LOAD_MENU) race_over();
+    /* Retail temporarily leaves LOAD_MENU while changing levels. Previous
+       versions interpreted *every* such transition as QUIT and dropped all
+       friends from the room. A genuine quit is still handled outside an
+       ongoing host-requested restart. */
+    if (on.started && EE32(MENU) != LOAD_MENU &&
+        !on.restart_accepted && !on.rematch_want)
+        race_over();
 }
 
 /* Online: the menu script, then in the race this PC's controller (DHD_NET_SCRIPTED=1, tests:
