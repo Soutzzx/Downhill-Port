@@ -36,21 +36,29 @@ Os padrões de corrida permanecem os da versão anterior, incluindo Esc para
 pausar e as ações alternativas de pedal e freio. Pausa e voltar agora têm
 contextos separados; mudar a pausa na corrida não muda a tecla de voltar do menu.
 
-## Mouse: somente nos menus
+## Mouse e Ctrl esquerdo: binds de corrida
 
-O mouse nunca controla câmera, direção, ataques ou personagem durante a corrida.
+O mouse **não navega mais pelos menus**. A seleção por ponteiro foi removida
+porque só funcionava em algumas telas e apontava para linhas erradas.
 
-- **Rolagem:** navega para cima/baixo em menus tradicionais e popups do port.
-- **Clique esquerdo:** confirma a opção atualmente selecionada no menu original.
-- **Clique direito:** volta/cancela nos menus.
-- **Passar o cursor e clicar numa linha:** seleciona diretamente a linha nos
-  menus popup do port, como PC SETTINGS, MENU BINDINGS e GAMEPLAY BINDINGS.
+- Abra OPTIONS > PC SETTINGS > KEYBOARD BINDINGS > GAMEPLAY BINDINGS.
+- Selecione **Punch** ou **Kick**, confirme com a tecla de menu, solte-a e
+  **clique com o botão esquerdo ou direito do mouse**.
+- Os botões esquerdo, direito, central, X1 e X2 são reconhecidos como
+  **MOUSE LEFT**, **MOUSE RIGHT**, **MOUSE MIDDLE**, **MOUSE X1** e **MOUSE X2**.
+- Também é possível selecionar **LEFT CTRL** e **RIGHT CTRL**.
+  Ctrl esquerdo é identificado separadamente, e o leitor de entrada não bloqueia
+  mais seu uso como comando de corrida.
+- Esses botões são válidos somente para os binds de **GAMEPLAY**.
+  Menu continua usando teclado ou controle, para não perder os atalhos de
+  navegação/confirmar.
+- Os botões físicos do mouse só disparam essas ações **durante a corrida**
+  e **quando a janela do jogo tem foco**.
+- Ctrl+outra tecla é tratado como atalho e as outras teclas desse conjunto não
+  são enviadas ao jogo. Isso evita interferir com Ctrl+Esc e similares.
 
-A seleção direta pelo ponteiro foi implementada para os popups da camada nativa
-do port. As telas originais do PS2, incluindo a página inicial, têm layouts e
-códigos de seleção diferentes e **ainda usam rolagem + clique para selecionar**.
-Os limites visuais da seleção de popups são aproximados e precisam de teste no
-Windows em resoluções e proporções de tela diferentes.
+Os binds permanecem salvos em `dhd.ini`, com os mesmos índices de gameplay
+(`bind_00` a `bind_18`).
 
 ## Configurações antigas preservadas
 
@@ -62,16 +70,15 @@ Windows em resoluções e proporções de tela diferentes.
 
 ## Testes antes da distribuição
 
-Este PR precisa de **compilação e testes reais no Windows**:
+Esta alteração ainda precisa ser compilada e testada no Windows:
 
-1. Alterar movimento de corrida para WASD sem afetar as setas do menu.
-2. Colocar W para subir no menu e também inclinar na corrida; ambos devem funcionar.
-3. Alterar confirmar no menu e pedal na corrida separadamente.
-4. Alterar a pausa na corrida; Esc deve continuar permitindo sair dos menus.
-5. Testar os botões de restaurar, reiniciar o jogo e conferir persistência.
-6. Testar mouse com janela 4:3, 16:9 e borderless; cursor sobre cada linha dos
-   menus de opções; rolagem e clique no menu inicial.
-7. Confirmar que durante a corrida o mouse não influencia a jogabilidade.
-8. Confirmar que um controle físico continua funcionando normalmente.
+1. Em GAMEPLAY BINDINGS, alterar Punch para MOUSE RIGHT e Kick para
+   MOUSE LEFT. Confirmar ambas as ações durante uma corrida.
+2. Inverter os dois e confirmar que o jogo troca as teclas sem conflito.
+3. Bindar LEFT CTRL para uma ação de corrida e verificar se ela responde.
+4. Abrir menus e confirmar que nenhum clique no mouse navega ou ativa opções.
+5. Reiniciar o jogo e confirmar a persistência dos binds no dhd.ini.
+6. Confirmar que joystick físico e bindings de MENU continuam funcionando.
+7. Testar jogar com foco fora da janela: mouse e teclas não devem atuar.
 
-Sem arquivos originais do jogo ou ISO neste PR.
+Não inclui ISO nem outros arquivos do jogo original.
