@@ -20,7 +20,41 @@ interface Stored extends LobbyEntry {
   updatedAt: number;
 }
 
+/* A direct player-hosted room is private and never appears in the public
+   lobby list. Only its randomly generated code resolves to an IP:port.
+   The 90s lease prevents dead hosts from leaving unusable codes behind. */
+const HOST_TTL_MS = 90_000;
+interface PlayerHost {
+  code: string;
+  address: string;
+  port: number;
+  token: string;
+  updatedAt: number;
+}
+
 export class LobbyIndex extends DurableObject<Env> {
+  async registerPlayerHost(code: string, address: string, port: number, token: string): Promise<boolean> {
+    const key = `host:${code}`, now = Date.now();
+    const old = await this.ctx.storage.get<PlayerHost>(key);
+    /* No other user may silently replace a live registration. */
+    if (old && now - old.updatedAt <= HOST_TTL_MS && old.token !== token)
+      return false;
+    await this.ctx.storage.put<PlayerHost>(key, { code, address, port, token, updatedAt: now });
+    return true;
+  }
+
+  async resolvePlayerHost(code: string): Promise<{ url: string } | null> {
+    const key = `host:${code}`;
+    const host = await this.ctx.storage.get<PlayerHost>(key);
+    if (!host) return null;
+    if (Date.now() - host.updatedAt > HOST_TTL_MS) {
+      await this.ctx.storage.delete(key);
+      return null;
+    }
+    const addr = host.address.includes(":") ? `[${host.address}]` : host.address;
+    return { url: `ws://${addr}:${host.port}` };
+  }
+
   async upsert(entry: LobbyEntry): Promise<void> {
     await this.ctx.storage.put<Stored>(`room:${entry.code}`, { ...entry, updatedAt: Date.now() });
   }
