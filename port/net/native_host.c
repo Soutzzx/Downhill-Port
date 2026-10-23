@@ -6,6 +6,7 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <tcpip.h>
 #include <windows.h>
 #include <bcrypt.h>
 #include <winhttp.h>
@@ -18,7 +19,7 @@
 #include "native_host.h"
 
 enum { HOST_PORT = 8787, CLIENTS = 12, MAX_MEMBERS = 8, IN_CAP = 16384,
-       OUT_CAP = 131072, FRAME_CAP = 4096, TICK_MS = 100 };
+       OUT_CAP = 131072, FRAME_CAP = 4096, TICK_MS = 10 };
 #define WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define ALPHABET "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 
@@ -473,6 +474,11 @@ static DWORD WINAPI server_main(void *arg) {
         if(FD_ISSET(listener,&rd)){
             SOCKET incoming=accept(listener,NULL,NULL);
             if(incoming!=INVALID_SOCKET){
+                /* Delayed ACK/Nagle interactions previously added tens or
+                   hundreds of milliseconds to tiny lobby/physics packets. */
+                int no_delay=1;
+                setsockopt(incoming,IPPROTO_TCP,TCP_NODELAY,(const char*)&no_delay,
+                           sizeof no_delay);
                 u_long async=1;ioctlsocket(incoming,FIONBIO,&async);
                 int chosen=-1;for(int i=0;i<CLIENTS;i++)if(peers[i].fd==INVALID_SOCKET){chosen=i;break;}
                 if(chosen>=0){
@@ -509,8 +515,9 @@ static DWORD WINAPI server_main(void *arg) {
    but race packets never pass through it. HTTPS registration uses the
    host's public source IP; every connection to the local relay is direct. */
 static HANDLE registrar_thread, registrar_stop;
-/* 0 waiting, 1 public directory accepted, -1 public directory unavailable.
-   This is NOT a firewall/CGNAT reachability probe; it checks code discovery. */
+/* 0 pending, 1 registered, -1 offline, -2 rejected (e.g. old Worker).
+   The HTTPS directory only maps H-codes to the host's IP: it never
+   carries gameplay packets and never changes the game's network route. */
 static volatile LONG directory_state;
 static int directory_register(void) {
     const char *custom = getenv("DHD_HOST_DIRECTORY");
@@ -519,25 +526,25 @@ static int directory_register(void) {
     char uri[350];
     if (!strncmp(base,"wss://",6)) snprintf(uri,sizeof uri,"https://%s/v1/player-host/register",base+6);
     else if (!strncmp(base,"https://",8)) snprintf(uri,sizeof uri,"%s/v1/player-host/register",base);
-    else return 0; /* private directory over plaintext is never used */
+    else return -2; /* private directory over plaintext is never used */
     wchar_t wide[400],host[256],path[256];
     MultiByteToWideChar(CP_UTF8,0,uri,-1,wide,400);
     URL_COMPONENTS u;
     memset(&u,0,sizeof u);u.dwStructSize=sizeof u;
     u.lpszHostName=host;u.dwHostNameLength=256;
     u.lpszUrlPath=path;u.dwUrlPathLength=256;
-    if(!WinHttpCrackUrl(wide,0,0,&u)||u.nScheme!=INTERNET_SCHEME_HTTPS)return 0;
+    if(!WinHttpCrackUrl(wide,0,0,&u)||u.nScheme!=INTERNET_SCHEME_HTTPS)return -2;
     char payload[190];
     snprintf(payload,sizeof payload,"{\"code\":\"%s\",\"port\":8787,\"token\":\"%s\"}",
              room_code,host_token);
     HINTERNET ses=WinHttpOpen(L"Downhill Revived native host",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
-    if(!ses)return 0;
+    if(!ses)return -1;
     WinHttpSetTimeouts(ses,2500,2500,3500,3500);
     HINTERNET conn=WinHttpConnect(ses,host,u.nPort,0);
     HINTERNET req=conn?WinHttpOpenRequest(conn,L"POST",path,NULL,WINHTTP_NO_REFERER,
                          WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE):NULL;
-    int success=0;
+    int result=-1;
     if(req){
         static const wchar_t hdr[]=L"Content-Type: application/json\r\n";
         if(WinHttpSendRequest(req,hdr,(DWORD)-1,payload,(DWORD)strlen(payload),
@@ -545,25 +552,28 @@ static int directory_register(void) {
             DWORD status=0,size=sizeof status;
             if(WinHttpQueryHeaders(req,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,
                                    WINHTTP_HEADER_NAME_BY_INDEX,&status,&size,
-                                   WINHTTP_NO_HEADER_INDEX) && status==200)
-                success=1;
+                                   WINHTTP_NO_HEADER_INDEX))
+                result=status==200?1:-2;
         }
         WinHttpCloseHandle(req);
     }
     if(conn)WinHttpCloseHandle(conn);
     WinHttpCloseHandle(ses);
-    return success;
+    return result;
 }
 static DWORD WINAPI registrar_main(void *unused) {
     (void)unused;
-    /* Register before the host creates its lobby. That way the Online menu
-       can detect a missing/old directory and offer a Cloudflare fallback
-       rather than displaying an unusable H-code. Renew the lease afterward. */
-    while(WaitForSingleObject(registrar_stop,500)==WAIT_TIMEOUT) {
-        if(now_ms()-last_register>20000 || !last_register) {
+    /* Never stop hosting when the registry is offline. Local connections
+       still work, and the registry can recover while the room remains up.
+       Retry failures after four seconds, keep successful 90s leases fresh
+       every twenty seconds. */
+    while(WaitForSingleObject(registrar_stop,300)==WAIT_TIMEOUT) {
+        int state=(int)InterlockedCompareExchange(&directory_state,0,0);
+        uint64_t interval=state==1?20000:4000;
+        if(!last_register || now_ms()-last_register>=interval) {
             last_register=now_ms();
-            int okay=directory_register();
-            InterlockedExchange(&directory_state,okay?1:-1);
+            int result=directory_register();
+            InterlockedExchange(&directory_state,result);
         }
     }
     return 0;
