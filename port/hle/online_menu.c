@@ -41,7 +41,14 @@ static const char code_letters[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  /* the se
 static const char name_letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
 enum { NAME_MAX = 12, CODE_LENGTH = 6, ROW_TEXT = 96, MAX_ROWS = 16, LIST_MAX = 8, MEMBER_ROWS = NET_MAX_SLOTS };
 
-enum { HOME, LIST, NAME, CODE, ROOM };
+enum { HOME, LIST, NAME, CODE, ROOM, HOST_ADDRESS };
+/* Existing public Cloudflare rooms keep their original server endpoint.
+   Player Hosted is an opt-in local relay reached through IP:port; no
+   persistent changes to dhd.ini or DHD_NET_SERVER. */
+static char hosted_server[160];
+static int hosted_mode;
+static const char hosted_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-:";
+enum { HOME_HOST = 5, HOME_JOIN_HOST, HOME_UPDATE };
 /* The room's rows */
 enum { R_CODE, R_TRACK, R_BOTS, R_SELECT, R_MEMBER };
 /* Keep player entries consecutive; action rows follow the last joined
@@ -204,8 +211,38 @@ static const char outdated_text[] = "A new version is out. Update to play online
 
 static const char *server(void)
 {
+    if (hosted_mode) return hosted_server[0] ? hosted_server : NULL;
     const char *s = getenv("DHD_NET_SERVER");
     return s && *s ? s : NULL;
+}
+
+/* Hostnames/IPv4 plus an optional port. An IP/port is entered explicitly
+   rather than accepting arbitrary URLs/paths in the game menu. */
+static int hosted_endpoint(const char *raw)
+{
+    size_t n = strlen(raw);
+    int colon = 0;
+    if (n < 1 || n > 80 || raw[0] == '.' || raw[0] == '-' ||
+        raw[n - 1] == '.' || raw[n - 1] == '-') return 0;
+    for (size_t i = 0; i < n; i++) {
+        char c = raw[i];
+        if (!(c >= '0' && c <= '9') && !(c >= 'A' && c <= 'Z') &&
+            c != '.' && c != '-' && c != ':') return 0;
+        if (c == ':' && ++colon > 1) return 0; /* IPv6 is not supported yet */
+    }
+    if (colon) {
+        const char *port = strchr(raw, ':') + 1;
+        int nport = 0;
+        if (!*port || port == raw + 1) return 0;
+        for (const char *c = port; *c; c++) {
+            if (*c < '0' || *c > '9') return 0;
+            nport = nport * 10 + *c - '0';
+            if (nport > 65535) return 0;
+        }
+        if (!nport) return 0;
+    }
+    snprintf(hosted_server, sizeof hosted_server, "ws://%s%s", raw, colon ? "" : ":8787");
+    return 1;
 }
 
 /* ---- Check the disc's executable, not the entire ISO, on a worker thread. ---- */
@@ -301,14 +338,15 @@ static const char *not_ready(void)
 /* ---- the screens ---- */
 
 static int entry_pick;           /* the letter on offer */
-static char entry[16];
+static char entry[96];
 static int home_row;  /* HOME's row last chosen: the cursor goes back to it */
 
 static void go(int to)
 {
     text_input_end();
     screen = to;
-    if (to == NAME || to == CODE) text_input_begin();
+    if (to == NAME || to == CODE || to == HOST_ADDRESS) text_input_begin();
+    if (to == HOME) hosted_mode = 0;
     if (to == ROOM) room_focus = selected;
     status[0] = 0;
     menu_page_rebuild_at(&page, to == HOME ? home_row : 0);
@@ -358,6 +396,8 @@ static void page_build(MenuPage *p)
         menu_page_row(p, "Create A Public Race", 1);
         menu_page_row(p, "Create A Private Race", 1);
         menu_page_row(p, "Join With A Code", 1);
+        menu_page_row(p, "Host Game On This PC", 1);
+        menu_page_row(p, "Join Player-Hosted Game", 1);
         if (outdated) menu_page_row(p, "Update Now", 1);
         break;
     case LIST:
@@ -380,9 +420,11 @@ static void page_build(MenuPage *p)
         break;
     case NAME:
     case CODE:
-        p->title = screen == NAME ? "YOUR NAME" : "JOIN WITH A CODE";
+    case HOST_ADDRESS:
+        p->title = screen == NAME ? "YOUR NAME" :
+                   screen == CODE ? "JOIN WITH A CODE" : "HOST IP / PORT";
         menu_page_row(p, text[0], 1);  /* written every frame */
-        menu_page_row(p, screen == NAME ? "Done" : "Join", 1);
+        menu_page_row(p, screen == NAME ? "Done" : screen == CODE ? "Join" : "Continue", 1);
         break;
     case ROOM:
         p->title = "RACE ROOM";
@@ -397,13 +439,15 @@ static void page_build(MenuPage *p)
 
 static void entry_text(void)
 {
-    const char *letters = screen == NAME ? name_letters : code_letters;
-    int max = screen == NAME ? NAME_MAX : CODE_LENGTH;
+    const char *letters = screen == NAME ? name_letters :
+                          screen == CODE ? code_letters : hosted_chars;
+    int max = screen == NAME ? NAME_MAX : screen == CODE ? CODE_LENGTH : 64;
     char shown = letters[entry_pick] == ' ' ? '-' : letters[entry_pick];
+    const char *label = screen == NAME ? "Name:" : screen == CODE ? "Code:" : "IP:";
     if ((int)strlen(entry) < max)
-        snprintf(text[0], ROW_TEXT, "%s\t\t%s[%c]", screen == NAME ? "Name:" : "Code:", entry, shown);
+        snprintf(text[0], ROW_TEXT, "%s\t\t%.45s[%c]", label, entry, shown);
     else
-        snprintf(text[0], ROW_TEXT, "%s\t\t%s", screen == NAME ? "Name:" : "Code:", entry);
+        snprintf(text[0], ROW_TEXT, "%s\t\t%.45s", label, entry);
 }
 
 static void room_update(MenuPage *p, NetLobby *l)
@@ -423,13 +467,14 @@ static void room_update(MenuPage *p, NetLobby *l)
         hle_log("online menu: refused: %s (%s)\n", l->error, l->error_code);
         net_leave();
         reset_selection();
-        if (too_old) home_row = 5;
+        if (too_old) home_row = HOME_UPDATE;
         if (in_shell) {  /* the rider screen's Back, then ONLINE again with the reason */
             race = 0;
             menu_page_close(p);
             return;
         }
         screen = HOME;
+        hosted_mode = 0;
         menu_page_rebuild_at(p, home_row);
         return;
     }
@@ -570,22 +615,32 @@ static void page_update(MenuPage *p, int cursor)
     p->footer = status[0] ? status : NULL;
     switch (screen) {
     case HOME:
-        if (!status[0] && cursor >= 2 && not_ready()) p->footer = not_ready();
+        if (!status[0] && cursor == HOME_HOST)
+            p->footer = "Start PlayerHost.cmd before hosting";
+        else if (!status[0] && cursor == HOME_JOIN_HOST)
+            p->footer = "Friends need your IP and room code";
+        else if (!status[0] && cursor >= 2 && cursor <= 4 && not_ready())
+            p->footer = not_ready();
         break;
     case LIST:
         if (list_state == 2 && !list_shown) menu_page_rebuild(p);  /* the answer came: the rows again */
         break;
     case NAME:
     case CODE:
+    case HOST_ADDRESS:
         {
-            int action = text_input_edit(entry, (screen == NAME ? NAME_MAX : CODE_LENGTH) + 1,
-                                         screen == NAME ? name_letters : code_letters);
+            int action = text_input_edit(entry,
+                                         (screen == NAME ? NAME_MAX : screen == CODE ? CODE_LENGTH : 64) + 1,
+                                         screen == NAME ? name_letters :
+                                         screen == CODE ? code_letters : hosted_chars);
             if (action < 0) { go(HOME); return; }
             if (action > 0) { page_accept(p, 1); return; }
         }
         entry_text();
         if (!status[0])
-            p->footer = screen == CODE ? "TYPE/CTRL+V - ENTER JOIN - ESC BACK" : "TYPE OR PAD - ENTER DONE - ESC CANCEL";
+            p->footer = screen == CODE ? "TYPE/CTRL+V - ENTER JOIN - ESC BACK" :
+                        screen == HOST_ADDRESS ? "PASTE HOST IP:PORT - ENTER NEXT" :
+                        "TYPE OR PAD - ENTER DONE - ESC CANCEL";
         break;
     case ROOM: {
         static NetLobby l;
@@ -612,13 +667,24 @@ static void page_accept(MenuPage *p, int row)
                 start_list();
                 go(LIST);
             }
-        } else if (row == 2 || row == 3)
+        } else if (row == 2 || row == 3) {
+            hosted_mode = 0;
             enter_room(row == 2 ? 2 : 1, NULL);
-        else if (row == 4) {
+        } else if (row == 4) {
+            hosted_mode = 0;
             entry[0] = 0;
             entry_pick = 0;
             go(CODE);
-        } else if (row == 5 && outdated) {
+        } else if (row == HOME_HOST) {
+            hosted_mode = 1;
+            snprintf(hosted_server, sizeof hosted_server, "ws://127.0.0.1:8787");
+            enter_room(1, NULL);
+        } else if (row == HOME_JOIN_HOST) {
+            hosted_mode = 1;
+            entry[0] = 0;
+            entry_pick = 0;
+            go(HOST_ADDRESS);
+        } else if (row == HOME_UPDATE && outdated) {
             hle_log("online menu: Update Now\n");
             update_request();  /* ends the game; the first dhd.exe updates and starts it again */
         }
@@ -631,13 +697,23 @@ static void page_accept(MenuPage *p, int row)
         }
         break;
     case NAME:
-    case CODE: {
-        const char *letters = screen == NAME ? name_letters : code_letters;
-        int max = screen == NAME ? NAME_MAX : CODE_LENGTH;
+    case CODE:
+    case HOST_ADDRESS: {
+        const char *letters = screen == NAME ? name_letters :
+                              screen == CODE ? code_letters : hosted_chars;
+        int max = screen == NAME ? NAME_MAX : screen == CODE ? CODE_LENGTH : 64;
         size_t n = strlen(entry);
         if (row == 0) {
             if ((int)n < max) entry[n] = letters[entry_pick], entry[n + 1] = 0;
             if (screen == CODE && (int)n + 1 == max) menu_page_set_cursor(p, 1);  /* the code is whole: Join */
+        } else if (screen == HOST_ADDRESS) {
+            if (hosted_endpoint(entry)) {
+                hosted_mode = 1;
+                entry[0] = 0;
+                entry_pick = 0;
+                go(CODE);
+            } else
+                snprintf(status, sizeof status, "Use a host IP or name with optional :port");
         } else if (screen == NAME) {
             while (n && entry[n - 1] == ' ') entry[--n] = 0;
             if (n) {
@@ -678,7 +754,8 @@ static void page_back(MenuPage *p)
         menu_page_cancel(p);
         break;
     case NAME:
-    case CODE: {
+    case CODE:
+    case HOST_ADDRESS: {
         size_t n = strlen(entry);
         if (n) entry[n - 1] = 0;
         else go(HOME);
@@ -709,8 +786,10 @@ static void page_step(MenuPage *p, int row, int by)
         menu_page_sound(by > 0);
         return;
     }
-    if ((screen == NAME || screen == CODE) && row == 0) {
-        int n = screen == NAME ? (int)sizeof name_letters - 1 : (int)sizeof code_letters - 1;
+    if ((screen == NAME || screen == CODE || screen == HOST_ADDRESS) && row == 0) {
+        int n = screen == NAME ? (int)sizeof name_letters - 1 :
+                screen == CODE ? (int)sizeof code_letters - 1 :
+                (int)sizeof hosted_chars - 1;
         entry_pick = (entry_pick + by + n) % n;
         menu_page_sound(by > 0);
     }
@@ -749,6 +828,7 @@ int port_online_menu(void)
     }
     race = 0;
     in_shell = 0;
+    hosted_mode = 0;
     run_page();
     if (!race) { net_leave(); reset_selection(); }
     return race;
