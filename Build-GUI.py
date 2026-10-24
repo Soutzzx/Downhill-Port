@@ -18,6 +18,8 @@ import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from tkinter import font as tkfont
+import math
 
 ROOT = Path(__file__).resolve().parent
 CLEAN = ROOT / "build" / "port" / "clean"
@@ -42,6 +44,184 @@ DOWNLOADS = {
 
 class Cancelled(Exception):
     pass
+
+
+
+
+def rounded_rect(canvas, x1, y1, x2, y2, radius, fill, outline="", border=1, tag="rounded"):
+    """Draw a slightly rounded rectangle without external dependencies."""
+    if x2 <= x1 or y2 <= y1:
+        return
+    radius = max(0, min(float(radius), (x2 - x1) / 2, (y2 - y1) / 2))
+    points = []
+    # Samples make both the fill and the stroke follow exactly the same curve.
+    for cx, cy, start in ((x2-radius, y1+radius, -90),
+                          (x2-radius, y2-radius, 0),
+                          (x1+radius, y2-radius, 90),
+                          (x1+radius, y1+radius, 180)):
+        for i in range(9):
+            a = math.radians(start + i * 90 / 8)
+            points.extend((cx + radius * math.cos(a), cy + radius * math.sin(a)))
+    return canvas.create_polygon(*points, fill=fill, outline=outline,
+                                 width=border, joinstyle="round", tags=tag)
+
+
+class RoundedCard(tk.Canvas):
+    """Canvas with a round backdrop; regular Tk children may use pack normally."""
+    def __init__(self, master, *, color, outside, outline="", radius=12, **kwargs):
+        super().__init__(master, bg=outside, highlightthickness=0, bd=0,
+                         relief="flat", **kwargs)
+        self.face = color
+        self.edge = outline
+        self.radius = radius
+        self.bind("<Configure>", self._paint, add="+")
+
+    def _paint(self, event=None):
+        w, h = self.winfo_width(), self.winfo_height()
+        self.delete("rounded")
+        rounded_rect(self, 1, 1, w-1, h-1, self.radius,
+                     self.face, self.edge, 1 if self.edge else 0)
+        self.tag_lower("rounded")
+
+
+class RoundedButton(tk.Canvas):
+    """Keyboard-accessible, hoverable, mildly rounded Tk button."""
+    THEMES = {
+        "tool": ("#243449", "#32465e", "#1a2635", "#f1f5f9", "#718096"),
+        "primary": ("#16a34a", "#15803d", "#264536", "#ffffff", "#96ae9e"),
+        "danger": ("#502a32", "#70343e", "#302a35", "#fecaca", "#8b7e87"),
+    }
+
+    def __init__(self, master, *, text, command, kind="tool", state="normal", **kwargs):
+        self.text_value = text
+        self.command = command
+        self.kind = kind
+        self.state_value = state
+        self.hovered = False
+        self.focused = False
+        family = "Segoe UI Semibold" if kind == "primary" else "Segoe UI"
+        self.text_font = tkfont.Font(family=family, size=10 if kind == "primary" else 9)
+        text_width = self.text_font.measure(text)
+        width = text_width + (39 if kind == "primary" else 32)
+        height = 44 if kind == "primary" else 37
+        outside = master.cget("bg")
+        super().__init__(master, width=width, height=height, bg=outside,
+                         highlightthickness=0, bd=0, relief="flat",
+                         takefocus=1, cursor="hand2" if state == "normal" else "arrow", **kwargs)
+        self.bind("<Enter>", self._enter)
+        self.bind("<Leave>", self._leave)
+        self.bind("<Button-1>", self._click)
+        self.bind("<Key-Return>", self._click)
+        self.bind("<Key-space>", self._click)
+        self.bind("<FocusIn>", self._focus_in)
+        self.bind("<FocusOut>", self._focus_out)
+        self.bind("<Configure>", self._render, add="+")
+        self._render()
+
+    def configure(self, cnf=None, **kwargs):
+        if isinstance(cnf, dict):
+            kwargs = {**cnf, **kwargs}
+        if "state" in kwargs:
+            self.state_value = kwargs.pop("state")
+            self.configure(cursor="hand2" if self.state_value == "normal" else "arrow")
+        if "text" in kwargs:
+            self.text_value = kwargs.pop("text")
+        if kwargs:
+            super().configure(**kwargs)
+        if hasattr(self, "text_font"):
+            self._render()
+
+    config = configure
+
+    def _focus_in(self, event=None):
+        self.focused = True
+        self._render()
+
+    def _focus_out(self, event=None):
+        self.focused = False
+        self._render()
+
+    def _enter(self, event=None):
+        self.hovered = True
+        self._render()
+
+    def _leave(self, event=None):
+        self.hovered = False
+        self._render()
+
+    def _click(self, event=None):
+        if self.state_value == "normal" and callable(self.command):
+            self.focus_set()
+            self.command()
+
+    def _render(self, event=None):
+        if not hasattr(self, "text_font"):
+            return
+        w = max(1, self.winfo_width())
+        h = max(1, self.winfo_height())
+        base, hover, disabled, fg, disabled_fg = self.THEMES[self.kind]
+        enabled = self.state_value == "normal"
+        fill = disabled if not enabled else (hover if self.hovered else base)
+        self.delete("all")
+        rounded_rect(self, 1, 1, w-1, h-1, 8, fill,
+                     "#7adfa4" if self.focused and enabled else fill)
+        self.create_text(w/2, h/2, text=self.text_value,
+                         font=self.text_font, fill=fg if enabled else disabled_fg,
+                         anchor="center")
+
+
+class RoundedBadge(tk.Canvas):
+    def __init__(self, master, *, text, fill, fg, radius=8, height=32,
+                 width=None, fontsize=9, **kwargs):
+        self.caption = text
+        self.fill_color = fill
+        self.fg_color = fg
+        self.radius = radius
+        self.text_font = tkfont.Font(family="Segoe UI Semibold", size=fontsize)
+        if width is None:
+            width = self.text_font.measure(text) + 27
+        super().__init__(master, width=width, height=height,
+                         bg=master.cget("bg"), bd=0, highlightthickness=0, **kwargs)
+        self.bind("<Configure>", self._render, add="+")
+        self._render()
+
+    def set_colors(self, bg, fg):
+        self.fill_color = bg
+        self.fg_color = fg
+        self._render()
+
+    def _render(self, event=None):
+        self.delete("all")
+        w, h = self.winfo_width(), self.winfo_height()
+        rounded_rect(self, 1, 1, max(w-1, 2), max(h-1, 2), self.radius,
+                     self.fill_color, self.fill_color)
+        self.create_text(w/2, h/2, text=self.caption, font=self.text_font,
+                         fill=self.fg_color, anchor="center")
+
+
+class RoundedProgress(tk.Canvas):
+    """Green, determinate-only progress bar; never sweeps side to side."""
+    def __init__(self, master, *, outside=None, **kwargs):
+        super().__init__(master, height=21, bg=outside or master.cget("bg"),
+                         bd=0, highlightthickness=0, **kwargs)
+        self.value = 0
+        self.bind("<Configure>", self._paint, add="+")
+        self._paint()
+
+    def set_value(self, value):
+        self.value = max(0, min(100, float(value)))
+        self._paint()
+
+    def _paint(self, event=None):
+        self.delete("all")
+        w, h = self.winfo_width(), self.winfo_height()
+        rounded_rect(self, 1, 1, w-1, h-1, 9, "#263449")
+        if self.value > 0:
+            usable = max(0, w-2)
+            size = usable * self.value / 100
+            right = min(w-1, 1+size)
+            rounded_rect(self, 1, 1, right, h-1,
+                         min(9, size/2), "#22c55e")
 
 
 class Builder(tk.Tk):
@@ -109,8 +289,8 @@ class Builder(tk.Tk):
                         thickness=22, borderwidth=0)
 
     def card(self, parent):
-        return tk.Frame(parent, bg=self.panel_bg, bd=0,
-                        highlightthickness=1, highlightbackground=self.border_color)
+        return RoundedCard(parent, color=self.panel_bg, outside=self.bg,
+                           outline=self.border_color, radius=13)
 
     def build_ui(self):
         main = ttk.Frame(self, style="Page.TFrame", padding=(25, 15))
@@ -129,9 +309,8 @@ class Builder(tk.Tk):
                  font=("Segoe UI Semibold", 24)).pack(side="left")
         tk.Label(title_area, text="Construtor nativo para Windows • interface de compilação",
                  bg=self.bg, fg=self.muted, font=("Segoe UI", 10)).pack(anchor="w", pady=(1, 0))
-        tk.Label(header, text="WINDOWS  /  BUILD TOOL", bg="#163327",
-                 fg=self.green_light, font=("Segoe UI Semibold", 9),
-                 padx=12, pady=9).pack(side="right", anchor="n")
+        RoundedBadge(header, text="WINDOWS  /  BUILD TOOL", fill="#163327",
+                     fg=self.green_light, radius=9, height=36).pack(side="right", anchor="n")
 
         # Entrada de arquivos e ferramentas.
         file_card = self.card(main)
@@ -144,29 +323,28 @@ class Builder(tk.Tk):
                  wraplength=900, justify="left").pack(anchor="w", padx=17, pady=(0, 10))
         file_actions = tk.Frame(file_card, bg=self.panel_bg)
         file_actions.pack(fill="x", padx=16, pady=(0, 13))
-        self.iso_button = ttk.Button(file_actions, text="Selecionar ISO", style="Tool.TButton",
-                                     command=self.choose_iso)
+        self.iso_button = RoundedButton(file_actions, text="Selecionar ISO",
+                                       command=self.choose_iso)
         self.iso_button.pack(side="left", padx=(0, 9))
-        ttk.Button(file_actions, text="Abrir pasta ISO", style="Tool.TButton",
-                   command=lambda: self.open_folder(ISO_DIR)).pack(side="left", padx=(0, 9))
-        ttk.Button(file_actions, text="Verificar ferramentas", style="Tool.TButton",
-                   command=self.show_tools).pack(side="left")
+        RoundedButton(file_actions, text="Abrir pasta ISO",
+                      command=lambda: self.open_folder(ISO_DIR)).pack(side="left", padx=(0, 9))
+        RoundedButton(file_actions, text="Verificar ferramentas",
+                      command=self.show_tools).pack(side="left")
 
         # Ações principais. Os mesmos modos do script original são preservados.
         controls = tk.Frame(main, bg=self.bg)
         controls.pack(fill="x", pady=(0, 12))
-        self.full_button = ttk.Button(controls, text="▶  Build completo", style="Primary.TButton",
-                                      command=lambda: self.start("full"))
+        self.full_button = RoundedButton(controls, text="▶  Build completo", kind="primary",
+                                         command=lambda: self.start("full"))
         self.full_button.pack(side="left", padx=(0, 9))
-        self.resume_button = ttk.Button(controls, text="↻  Continuar linkagem", style="Tool.TButton",
-                                        command=lambda: self.start("resume"))
+        self.resume_button = RoundedButton(controls, text="↻  Continuar linkagem",
+                                           command=lambda: self.start("resume"))
         self.resume_button.pack(side="left", padx=(0, 9))
-        self.cancel_button = ttk.Button(controls, text="■  Cancelar", style="Danger.TButton",
-                                        command=self.cancel, state="disabled")
+        self.cancel_button = RoundedButton(controls, text="■  Cancelar", kind="danger",
+                                           command=self.cancel, state="disabled")
         self.cancel_button.pack(side="left")
-        self.open_exe_button = ttk.Button(controls, text="Abrir pasta do jogo  ↗",
-                                          style="Tool.TButton", command=self.open_exe,
-                                          state="disabled")
+        self.open_exe_button = RoundedButton(controls, text="Abrir pasta do jogo  ↗",
+                                             command=self.open_exe, state="disabled")
         self.open_exe_button.pack(side="right")
 
         # Progresso real por etapas; em linkagem mantém o valor atual,
@@ -187,9 +365,7 @@ class Builder(tk.Tk):
         tk.Label(progress_card, textvariable=self.status, bg=self.panel_bg,
                  fg=self.foreground, font=("Segoe UI", 10),
                  wraplength=920, justify="left").pack(anchor="w", padx=17, pady=(0, 11))
-        self.bar = ttk.Progressbar(progress_card, orient="horizontal",
-                                   mode="determinate", maximum=100,
-                                   style="Green.Horizontal.TProgressbar")
+        self.bar = RoundedProgress(progress_card, outside=self.panel_bg)
         self.bar.pack(fill="x", padx=17, pady=(0, 7))
         self.progress_label = tk.StringVar(value="Aguardando início")
         tk.Label(progress_card, textvariable=self.progress_label, bg=self.panel_bg,
@@ -199,13 +375,12 @@ class Builder(tk.Tk):
         phases.pack(fill="x", padx=17, pady=(0, 15))
         self.phase_labels = []
         for index, title in enumerate(("PRÉ-REQUISITOS", "ARQUIVOS", "COMPILAÇÃO", "EXECUTÁVEL")):
-            cell = tk.Frame(phases, bg="#1b293b")
-            cell.pack(side="left", fill="x", expand=True, padx=(0, 5) if index < 3 else (0, 0))
-            label = tk.Label(cell, text=f"{index + 1:02d}  {title}", bg="#1b293b",
-                             fg=self.muted, font=("Segoe UI Semibold", 8),
-                             padx=5, pady=7)
-            label.pack(fill="x")
-            self.phase_labels.append((cell, label))
+            pill = RoundedBadge(phases, text=f"{index + 1:02d}  {title}",
+                                fill="#1b293b", fg=self.muted,
+                                fontsize=8, height=33, radius=8)
+            pill.pack(side="left", fill="x", expand=True,
+                      padx=(0, 5) if index < 3 else (0, 0))
+            self.phase_labels.append(pill)
         self.set_stage("idle")
 
         # Registro de saída com cores mais discretas e fonte monoespaçada.
@@ -215,9 +390,10 @@ class Builder(tk.Tk):
         log_header.pack(fill="x", padx=16, pady=(10, 7))
         tk.Label(log_header, text="REGISTRO DA EXECUÇÃO", bg=self.panel_bg,
                  fg=self.foreground, font=("Segoe UI Semibold", 10)).pack(side="left")
-        ttk.Button(log_header, text="Abrir logs  ↗", style="Tool.TButton",
-                   command=lambda: self.open_folder(CLEAN / "logs")).pack(side="right")
-        log_body = tk.Frame(log_card, bg="#0b1422")
+        RoundedButton(log_header, text="Abrir logs  ↗",
+                      command=lambda: self.open_folder(CLEAN / "logs")).pack(side="right")
+        log_body = RoundedCard(log_card, color="#0b1422", outside=self.panel_bg,
+                               radius=9)
         log_body.pack(fill="both", expand=True, padx=16, pady=(0, 15))
         self.log_widget = tk.Text(log_body, bg="#0b1422", fg="#cad5e5",
                        insertbackground="#f8fafc", selectbackground="#235a47",
@@ -231,12 +407,13 @@ class Builder(tk.Tk):
         self.log_widget.tag_configure("error", foreground="#fca5a5")
         self.log_widget.tag_configure("success", foreground="#86efac")
         self.log_widget.tag_configure("command", foreground="#7dd3fc")
-        scrollbar.pack(side="right", fill="y")
-        self.log_widget.pack(side="left", fill="both", expand=True)
-        tk.Label(main, text="Progresso estimado por etapas. A linkagem pode manter a barra parada. "
-                 "No build, 100% só após localizar dhd.exe. A ISO nunca é enviada à internet.",
+        scrollbar.pack(side="right", fill="y", padx=(0, 8), pady=8)
+        self.log_widget.pack(side="left", fill="both", expand=True,
+                             padx=(9, 0), pady=8)
+        tk.Label(main, text="Progresso estimado. A linkagem pode pausar a barra. "
+                 "100% só com dhd.exe confirmado. A ISO fica no seu PC.",
                  bg=self.bg, fg=self.muted, font=("Segoe UI", 9),
-                 justify="left", wraplength=950).pack(anchor="w")
+                 justify="left", wraplength=740).pack(anchor="w")
 
     def set_stage(self, stage):
         self.stage = stage
@@ -258,11 +435,10 @@ class Builder(tk.Tk):
         current = {"idle": -1, "setup": 0, "verify": 0, "extract": 1,
                    "copy": 1, "compile": 2, "link": 3, "finalize": 3,
                    "done": 4, "copied": 2, "failed": -1}.get(stage, -1)
-        for i, (cell, label) in enumerate(self.phase_labels):
+        for i, pill in enumerate(self.phase_labels):
             bg = "#174b34" if i < current else ("#226a49" if i == current else "#1b293b")
             fg = self.green_light if i <= current else self.muted
-            cell.configure(bg=bg)
-            label.configure(bg=bg, fg=fg)
+            pill.set_colors(bg, fg)
 
     def log(self, line):
         message = str(line).rstrip()
@@ -309,7 +485,7 @@ class Builder(tk.Tk):
     def set_percent(self, number, label):
         # Nunca recua durante a mesma operação. O reset acontece em start().
         self.percent = max(self.percent, max(0, min(100, int(number))))
-        self.bar["value"] = self.percent
+        self.bar.set_value(self.percent)
         self.percent_var.set(f"{self.percent}%")
         if int(number) >= self.percent:
             self.progress_label.set(label)
