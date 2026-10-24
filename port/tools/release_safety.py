@@ -76,7 +76,8 @@ def check(path):
     expected = expected_version()
     if version != expected:
         raise RuntimeError(f"Built version {version} does not match version.h {expected}")
-    digest = hashlib.file_digest(path.open("rb"), "sha256").hexdigest()
+    with path.open("rb") as stream:
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
     print(f"Executable: {path}")
     print(f"Version: {'.'.join(map(str, version))}")
     print(f"SHA-256: {digest}")
