@@ -1,2 +1,35 @@
-// dhd.exe's resources: the Downhill Revived icon (port/res/icon.png, sizes 16-256).
+// Resources for Downhill Revived. Version comes from port/include/version.h.
+// Descriptive fields identify this independently built community port; they
+// do NOT claim an Authenticode signature or endorsement by the game publisher.
+#include "version.h"
+
 1 ICON "dhd.ico"
+
+1 VERSIONINFO
+ FILEVERSION DHD_VERSION_MAJOR,DHD_VERSION_MINOR,DHD_VERSION_PATCH,0
+ PRODUCTVERSION DHD_VERSION_MAJOR,DHD_VERSION_MINOR,DHD_VERSION_PATCH,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Downhill Revived Contributors"
+            VALUE "FileDescription", "Downhill Revived - independent PC port"
+            VALUE "FileVersion", DHD_VERSION
+            VALUE "InternalName", "dhd"
+            VALUE "OriginalFilename", "dhd.exe"
+            VALUE "ProductName", "Downhill Revived"
+            VALUE "ProductVersion", DHD_VERSION
+            VALUE "Comments", "Independent fan project; original game rights remain with their owners."
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
