@@ -188,6 +188,10 @@ def main():
     exe = TREE / 'build' / 'port' / 'link' / 'dhd.exe'
     if a.recomp_basis:
         exe = relink_with_basis(a.recomp_basis.resolve(), env)
+    # Abort packaging when the EXE lacks meaningful or matching Windows
+    # version resources. The check never executes the built program.
+    run([sys.executable, 'port/tools/release_safety.py', str(exe)],
+        env, logs / 'release-check.log')
     out = CLEAN / (commit[:8] + ('-basis' if a.recomp_basis else ''))
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy2(exe, out / 'dhd.exe')
