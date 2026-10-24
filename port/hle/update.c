@@ -138,7 +138,9 @@ static void http_close(Http *h)
     memset(h, 0, sizeof *h);
 }
 
-/* Sends a GET for url (http or https; redirects followed) and reads the status. Returns the
+/* Update metadata and executable downloads must use authenticated HTTPS.
+   This is transport integrity for real users, not an antivirus workaround.
+   Returns the
    HTTP status (200 on success), or 0, with why for anything but 200. */
 static int http_open(Http *h, const char *url, int receive_ms, char *why, size_t why_size)
 {
@@ -147,6 +149,10 @@ static int http_open(Http *h, const char *url, int receive_ms, char *why, size_t
     URL_COMPONENTS uc;
     DWORD status = 0, size = sizeof status;
     memset(h, 0, sizeof *h);
+    if (strncmp(url, "https://", 8)) {
+        snprintf(why, why_size, "updates require HTTPS (not %s)", url);
+        return 0;
+    }
     memset(&uc, 0, sizeof uc);
     uc.dwStructSize = sizeof uc;
     MultiByteToWideChar(CP_UTF8, 0, url, -1, wurl, 1100);
@@ -274,7 +280,7 @@ static int latest_release(Release *r, char *why, size_t why_size)
     }
     int v[3];
     if (!parse_version(r->version, v) || !is_hex64(r->sha256) ||
-        (strncmp(r->url, "https://", 8) && strncmp(r->url, "http://", 7))) {
+        strncmp(r->url, "https://", 8)) {
         snprintf(why, why_size, "the update source %s gave an unusable answer (version \"%s\")", url, r->version);
         return 0;
     }
