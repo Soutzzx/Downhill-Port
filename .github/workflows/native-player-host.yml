@@ -5,6 +5,9 @@ on:
     paths:
       - "port/net/native_host.*"
       - "port/net/nat_forward.*"
+      - "port/res/dhd.rc"
+      - "port/include/version.h"
+      - "port/tools/release_safety.py"
       - "port/net/player_host.*"
       - "port/net/native_host_test_main.c"
       - "port/net/test_native_host.py"
@@ -24,6 +27,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
+      - name: Compile truthful Windows resources
+        shell: cmd
+        run: >
+          llvm-rc /I port/include /fo native_test.res port/res/dhd.rc
       - name: Build native Windows relay (no ISO needed)
         shell: cmd
         run: >
@@ -32,7 +39,11 @@ jobs:
           port/net/native_host.c
           port/net/nat_forward.c
           port/net/json.c
+          native_test.res
           ws2_32.lib winhttp.lib bcrypt.lib ole32.lib oleaut32.lib uuid.lib
+      - name: Verify Windows PE version metadata without executing it
+        shell: pwsh
+        run: python port/tools/release_safety.py .\\native_host_test.exe
       - name: Test WebSocket lobby and race relay
         shell: pwsh
         run: python port/net/test_native_host.py .\native_host_test.exe
