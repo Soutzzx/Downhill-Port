@@ -17,7 +17,7 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, ttk
 
 ROOT = Path(__file__).resolve().parent
 CLEAN = ROOT / "build" / "port" / "clean"
@@ -47,10 +47,10 @@ class Cancelled(Exception):
 class Builder(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Downhill Port • Construtor Windows")
-        self.geometry("880x680")
-        self.minsize(740, 570)
-        self.configure(bg="#111827")
+        self.title("Downhill Port  |  Windows Builder")
+        self.geometry("1020x780")
+        self.minsize(820, 710)
+        self.configure(bg="#0a101c")
         self.events = queue.Queue()
         self.worker = None
         self.process = None
@@ -73,64 +73,204 @@ class Builder(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def configure_theme(self):
+        # Cores definidas uma única vez para manter a interface consistente.
+        self.bg = "#0a101c"
+        self.panel_bg = "#121c2c"
+        self.border_color = "#263449"
+        self.foreground = "#f1f5f9"
+        self.muted = "#93a4bc"
+        self.green = "#22c55e"
+        self.green_light = "#86efac"
         style = ttk.Style(self)
         style.theme_use("clam")
-        style.configure("TFrame", background="#111827")
-        style.configure("TLabel", background="#111827", foreground="#dbeafe", font=("Segoe UI", 10))
-        style.configure("Title.TLabel", font=("Segoe UI Semibold", 21), foreground="#f8fafc")
-        style.configure("Muted.TLabel", foreground="#94a3b8")
-        style.configure("TButton", font=("Segoe UI", 10), padding=(12, 8))
-        style.configure("Accent.TButton", background="#2563eb", foreground="#ffffff")
-        style.map("Accent.TButton", background=[("active", "#1d4ed8"), ("disabled", "#475569")])
-        style.configure("TProgressbar", thickness=20, background="#60a5fa", troughcolor="#334155")
+        style.configure("Page.TFrame", background=self.bg)
+        style.configure("Card.TFrame", background=self.panel_bg)
+        style.configure("Tool.TButton", font=("Segoe UI", 9), padding=(13, 9),
+                        background="#243449", foreground=self.foreground,
+                        borderwidth=0, relief="flat")
+        style.map("Tool.TButton",
+                  background=[("disabled", "#1a2635"), ("active", "#32465e")],
+                  foreground=[("disabled", "#718096")])
+        style.configure("Primary.TButton", font=("Segoe UI Semibold", 10), padding=(19, 12),
+                        background="#16a34a", foreground="#ffffff",
+                        borderwidth=0, relief="flat")
+        style.map("Primary.TButton",
+                  background=[("disabled", "#264536"), ("active", "#15803d")],
+                  foreground=[("disabled", "#96ae9e")])
+        style.configure("Danger.TButton", font=("Segoe UI", 9), padding=(13, 10),
+                        background="#502a32", foreground="#fecaca", borderwidth=0)
+        style.map("Danger.TButton",
+                  background=[("disabled", "#302a35"), ("active", "#70343e")],
+                  foreground=[("disabled", "#8b7e87")])
+        # Determinate apenas. Não há animação de vaivém nem modo indeterminate.
+        style.configure("Green.Horizontal.TProgressbar", background=self.green,
+                        lightcolor=self.green, darkcolor=self.green,
+                        troughcolor="#263449", bordercolor="#263449",
+                        thickness=22, borderwidth=0)
+
+    def card(self, parent):
+        return tk.Frame(parent, bg=self.panel_bg, bd=0,
+                        highlightthickness=1, highlightbackground=self.border_color)
 
     def build_ui(self):
-        frame = ttk.Frame(self, padding=22)
-        frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="DOWNHILL PORT", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(frame, text="Construa a versão nativa do Windows sem precisar digitar comandos.",
-                  style="Muted.TLabel").pack(anchor="w", pady=(2, 15))
+        main = ttk.Frame(self, style="Page.TFrame", padding=(25, 15))
+        main.pack(fill="both", expand=True)
+
+        # Cabeçalho: branding e finalidade em um único bloco.
+        header = tk.Frame(main, bg=self.bg)
+        header.pack(fill="x", pady=(0, 12))
+        title_area = tk.Frame(header, bg=self.bg)
+        title_area.pack(side="left", fill="x", expand=True)
+        brand = tk.Frame(title_area, bg=self.bg)
+        brand.pack(anchor="w")
+        tk.Label(brand, text="DOWNHILL", bg=self.bg, fg=self.foreground,
+                 font=("Segoe UI Black", 24)).pack(side="left")
+        tk.Label(brand, text="  PORT", bg=self.bg, fg=self.green_light,
+                 font=("Segoe UI Semibold", 24)).pack(side="left")
+        tk.Label(title_area, text="Construtor nativo para Windows • interface de compilação",
+                 bg=self.bg, fg=self.muted, font=("Segoe UI", 10)).pack(anchor="w", pady=(1, 0))
+        tk.Label(header, text="WINDOWS  /  BUILD TOOL", bg="#163327",
+                 fg=self.green_light, font=("Segoe UI Semibold", 9),
+                 padx=12, pady=9).pack(side="right", anchor="n")
+
+        # Entrada de arquivos e ferramentas.
+        file_card = self.card(main)
+        file_card.pack(fill="x", pady=(0, 9))
+        tk.Label(file_card, text="ARQUIVOS DO JOGO", bg=self.panel_bg,
+                 fg=self.green_light, font=("Segoe UI Semibold", 10)).pack(anchor="w", padx=17, pady=(13, 3))
         self.iso_label = tk.StringVar(value="Verificando ISO...")
-        ttk.Label(frame, textvariable=self.iso_label, wraplength=800).pack(anchor="w", pady=(0, 7))
-        top = ttk.Frame(frame)
-        top.pack(fill="x", pady=(0, 12))
-        self.iso_button = ttk.Button(top, text="Selecionar ISO", command=self.choose_iso)
-        self.iso_button.pack(side="left", padx=(0, 8))
-        ttk.Button(top, text="Abrir pasta ISO", command=lambda: self.open_folder(ISO_DIR)).pack(side="left", padx=(0, 8))
-        ttk.Button(top, text="Verificar ferramentas", command=self.show_tools).pack(side="left")
-        controls = ttk.Frame(frame)
-        controls.pack(fill="x", pady=(0, 13))
-        self.full_button = ttk.Button(controls, text="▶ Build completo", style="Accent.TButton",
+        tk.Label(file_card, textvariable=self.iso_label, bg=self.panel_bg,
+                 fg=self.foreground, font=("Segoe UI", 10),
+                 wraplength=900, justify="left").pack(anchor="w", padx=17, pady=(0, 10))
+        file_actions = tk.Frame(file_card, bg=self.panel_bg)
+        file_actions.pack(fill="x", padx=16, pady=(0, 13))
+        self.iso_button = ttk.Button(file_actions, text="Selecionar ISO", style="Tool.TButton",
+                                     command=self.choose_iso)
+        self.iso_button.pack(side="left", padx=(0, 9))
+        ttk.Button(file_actions, text="Abrir pasta ISO", style="Tool.TButton",
+                   command=lambda: self.open_folder(ISO_DIR)).pack(side="left", padx=(0, 9))
+        ttk.Button(file_actions, text="Verificar ferramentas", style="Tool.TButton",
+                   command=self.show_tools).pack(side="left")
+
+        # Ações principais. Os mesmos modos do script original são preservados.
+        controls = tk.Frame(main, bg=self.bg)
+        controls.pack(fill="x", pady=(0, 12))
+        self.full_button = ttk.Button(controls, text="▶  Build completo", style="Primary.TButton",
                                       command=lambda: self.start("full"))
-        self.full_button.pack(side="left", padx=(0, 8))
-        self.resume_button = ttk.Button(controls, text="↻ Continuar linkagem", command=lambda: self.start("resume"))
-        self.resume_button.pack(side="left", padx=(0, 8))
-        self.cancel_button = ttk.Button(controls, text="■ Cancelar", command=self.cancel, state="disabled")
-        self.cancel_button.pack(side="left", padx=(0, 8))
-        self.open_exe_button = ttk.Button(controls, text="Abrir pasta do jogo", command=self.open_exe, state="disabled")
+        self.full_button.pack(side="left", padx=(0, 9))
+        self.resume_button = ttk.Button(controls, text="↻  Continuar linkagem", style="Tool.TButton",
+                                        command=lambda: self.start("resume"))
+        self.resume_button.pack(side="left", padx=(0, 9))
+        self.cancel_button = ttk.Button(controls, text="■  Cancelar", style="Danger.TButton",
+                                        command=self.cancel, state="disabled")
+        self.cancel_button.pack(side="left")
+        self.open_exe_button = ttk.Button(controls, text="Abrir pasta do jogo  ↗",
+                                          style="Tool.TButton", command=self.open_exe,
+                                          state="disabled")
         self.open_exe_button.pack(side="right")
-        self.status = tk.StringVar(value="Pronto.")
-        ttk.Label(frame, textvariable=self.status, wraplength=800).pack(anchor="w", pady=(0, 6))
-        self.bar = ttk.Progressbar(frame, orient="horizontal", mode="determinate", maximum=100)
-        self.bar.pack(fill="x", pady=(0, 7))
-        self.progress_label = tk.StringVar(value="0%")
-        ttk.Label(frame, textvariable=self.progress_label, style="Muted.TLabel").pack(anchor="w")
-        loghead = ttk.Frame(frame)
-        loghead.pack(fill="x", pady=(15, 7))
-        ttk.Label(loghead, text="Registro da execução").pack(side="left")
-        ttk.Button(loghead, text="Abrir logs", command=lambda: self.open_folder(CLEAN / "logs")).pack(side="right")
-        self.log_widget = scrolledtext.ScrolledText(frame, bg="#0b1220", fg="#dbeafe",
-                       insertbackground="#f8fafc", font=("Consolas", 9), relief="flat", height=16,
-                       wrap="word", padx=11, pady=9, state="disabled")
-        self.log_widget.pack(fill="both", expand=True)
-        ttk.Label(frame,
-                  text="Progresso por etapas. A linkagem pode demorar e não fornece uma porcentagem exata. "
-                       "O aplicativo nunca envia a ISO para a internet.",
-                  style="Muted.TLabel", wraplength=800).pack(anchor="w", pady=(9, 0))
+
+        # Progresso real por etapas; em linkagem mantém o valor atual,
+        # pois o linker não fornece contagem confiável.
+        progress_card = self.card(main)
+        progress_card.pack(fill="x", pady=(0, 9))
+        progress_top = tk.Frame(progress_card, bg=self.panel_bg)
+        progress_top.pack(fill="x", padx=17, pady=(14, 5))
+        self.activity_var = tk.StringVar(value="PRONTO PARA COMPILAR")
+        self.activity_label = tk.Label(progress_top, textvariable=self.activity_var,
+                      bg=self.panel_bg, fg=self.green_light,
+                      font=("Segoe UI Semibold", 10))
+        self.activity_label.pack(side="left")
+        self.percent_var = tk.StringVar(value="0%")
+        tk.Label(progress_top, textvariable=self.percent_var, bg=self.panel_bg,
+                 fg=self.foreground, font=("Segoe UI Semibold", 21)).pack(side="right")
+        self.status = tk.StringVar(value="Selecione sua ISO ou inicie a compilação.")
+        tk.Label(progress_card, textvariable=self.status, bg=self.panel_bg,
+                 fg=self.foreground, font=("Segoe UI", 10),
+                 wraplength=920, justify="left").pack(anchor="w", padx=17, pady=(0, 11))
+        self.bar = ttk.Progressbar(progress_card, orient="horizontal",
+                                   mode="determinate", maximum=100,
+                                   style="Green.Horizontal.TProgressbar")
+        self.bar.pack(fill="x", padx=17, pady=(0, 7))
+        self.progress_label = tk.StringVar(value="Aguardando início")
+        tk.Label(progress_card, textvariable=self.progress_label, bg=self.panel_bg,
+                 fg=self.muted, font=("Segoe UI", 9)).pack(anchor="w", padx=17, pady=(0, 12))
+
+        phases = tk.Frame(progress_card, bg=self.panel_bg)
+        phases.pack(fill="x", padx=17, pady=(0, 15))
+        self.phase_labels = []
+        for index, title in enumerate(("PRÉ-REQUISITOS", "ARQUIVOS", "COMPILAÇÃO", "EXECUTÁVEL")):
+            cell = tk.Frame(phases, bg="#1b293b")
+            cell.pack(side="left", fill="x", expand=True, padx=(0, 5) if index < 3 else (0, 0))
+            label = tk.Label(cell, text=f"{index + 1:02d}  {title}", bg="#1b293b",
+                             fg=self.muted, font=("Segoe UI Semibold", 8),
+                             padx=5, pady=7)
+            label.pack(fill="x")
+            self.phase_labels.append((cell, label))
+        self.set_stage("idle")
+
+        # Registro de saída com cores mais discretas e fonte monoespaçada.
+        log_card = self.card(main)
+        log_card.pack(fill="both", expand=True, pady=(0, 9))
+        log_header = tk.Frame(log_card, bg=self.panel_bg)
+        log_header.pack(fill="x", padx=16, pady=(10, 7))
+        tk.Label(log_header, text="REGISTRO DA EXECUÇÃO", bg=self.panel_bg,
+                 fg=self.foreground, font=("Segoe UI Semibold", 10)).pack(side="left")
+        ttk.Button(log_header, text="Abrir logs  ↗", style="Tool.TButton",
+                   command=lambda: self.open_folder(CLEAN / "logs")).pack(side="right")
+        log_body = tk.Frame(log_card, bg="#0b1422")
+        log_body.pack(fill="both", expand=True, padx=16, pady=(0, 15))
+        self.log_widget = tk.Text(log_body, bg="#0b1422", fg="#cad5e5",
+                       insertbackground="#f8fafc", selectbackground="#235a47",
+                       font=("Consolas", 9), relief="flat", height=4,
+                       wrap="word", padx=12, pady=10, state="disabled", bd=0)
+        scrollbar = tk.Scrollbar(log_body, orient="vertical", command=self.log_widget.yview,
+                                 bg="#25354a", troughcolor="#0b1422",
+                                 activebackground="#3c536e", highlightthickness=0,
+                                 bd=0, width=12)
+        self.log_widget.configure(yscrollcommand=scrollbar.set)
+        self.log_widget.tag_configure("error", foreground="#fca5a5")
+        self.log_widget.tag_configure("success", foreground="#86efac")
+        self.log_widget.tag_configure("command", foreground="#7dd3fc")
+        scrollbar.pack(side="right", fill="y")
+        self.log_widget.pack(side="left", fill="both", expand=True)
+        tk.Label(main, text="Progresso estimado por etapas. A linkagem pode manter a barra parada. "
+                 "No build, 100% só após localizar dhd.exe. A ISO nunca é enviada à internet.",
+                 bg=self.bg, fg=self.muted, font=("Segoe UI", 9),
+                 justify="left", wraplength=950).pack(anchor="w")
+
+    def set_stage(self, stage):
+        self.stage = stage
+        headings = {
+            "idle": "PRONTO PARA COMPILAR",
+            "setup": "PREPARANDO AMBIENTE",
+            "verify": "VERIFICANDO FERRAMENTAS",
+            "extract": "PREPARANDO ARQUIVOS",
+            "copy": "COPIANDO ISO",
+            "compile": "COMPILANDO O JOGO",
+            "link": "GERANDO O EXECUTÁVEL",
+            "finalize": "VALIDANDO EXECUTÁVEL",
+            "done": "BUILD CONCLUÍDO",
+            "copied": "ISO COPIADA COM SUCESSO",
+            "failed": "COMPILAÇÃO INTERROMPIDA",
+        }
+        self.activity_var.set(headings.get(stage, "EM ANDAMENTO"))
+        self.activity_label.configure(fg="#fca5a5" if stage == "failed" else self.green_light)
+        current = {"idle": -1, "setup": 0, "verify": 0, "extract": 1,
+                   "copy": 1, "compile": 2, "link": 3, "finalize": 3,
+                   "done": 4, "copied": 2, "failed": -1}.get(stage, -1)
+        for i, (cell, label) in enumerate(self.phase_labels):
+            bg = "#174b34" if i < current else ("#226a49" if i == current else "#1b293b")
+            fg = self.green_light if i <= current else self.muted
+            cell.configure(bg=bg)
+            label.configure(bg=bg, fg=fg)
 
     def log(self, line):
+        message = str(line).rstrip()
         self.log_widget.configure(state="normal")
-        self.log_widget.insert("end", str(line).rstrip() + "\n")
+        color_tag = ("error" if message.startswith(("ERRO:", "Traceback", "Falha"))
+                     else "success" if message.startswith(("Executável:", "Executável confirmado:"))
+                     else "command" if message.startswith("> ") else None)
+        self.log_widget.insert("end", message + "\n", color_tag)
         if int(self.log_widget.index("end-1c").split(".")[0]) > 1800:
             self.log_widget.delete("1.0", "400.0")
         self.log_widget.see("end")
@@ -150,15 +290,14 @@ class Builder(tk.Tk):
                 elif kind == "progress":
                     self.set_percent(args[0], args[1])
                 elif kind == "stage":
-                    self.stage = args[0]
+                    self.set_stage(args[0])
                     if args[0] == "link":
                         self.link_start = time.monotonic()
-                        self.bar.configure(mode="indeterminate")
-                        self.bar.start(12)
-                        self.progress_label.set("70%+ • Linkagem sem porcentagem exata")
-                    elif self.bar.cget("mode") == "indeterminate":
-                        self.bar.stop()
-                        self.bar.configure(mode="determinate")
+                        # A barra permanece determinate (verde e sem vaivém).
+                        # A porcentagem só será 100 após encontrar dhd.exe.
+                        self.set_percent(70, "Linkagem em andamento • sem porcentagem exata")
+                    elif args[0] == "finalize":
+                        self.set_percent(96, "Confirmando os arquivos gerados")
                 elif kind == "done":
                     self.finish(*args)
         except queue.Empty:
@@ -168,12 +307,12 @@ class Builder(tk.Tk):
         self.after(800, self.drain_events)
 
     def set_percent(self, number, label):
-        self.percent = max(0, min(100, int(number)))
-        if self.bar.cget("mode") == "indeterminate":
-            self.bar.stop()
-            self.bar.configure(mode="determinate")
+        # Nunca recua durante a mesma operação. O reset acontece em start().
+        self.percent = max(self.percent, max(0, min(100, int(number))))
         self.bar["value"] = self.percent
-        self.progress_label.set(f"{self.percent}% • {label}")
+        self.percent_var.set(f"{self.percent}%")
+        if int(number) >= self.percent:
+            self.progress_label.set(label)
 
     def poll_build_progress(self):
         if self.stage == "compile" and self.mode == "full":
@@ -234,16 +373,20 @@ class Builder(tk.Tk):
             self.iso_label.set("Nenhuma ISO encontrada. Selecione sua cópia USA (SCUS-97177).")
         self.find_exe()
 
-    def find_exe(self):
+    def locate_exe(self):
         manifests = sorted((p for p in CLEAN.glob("*/manifest.json") if p.parent.name != "tree"),
                            key=lambda p: p.stat().st_mtime, reverse=True)
         for manifest in manifests:
             exe = manifest.parent / "dhd.exe"
-            if exe.is_file():
-                self.exe_path = exe
-                self.open_exe_button.configure(state="normal")
+            if exe.is_file() and exe.stat().st_size > 0:
                 return exe
         return None
+
+    def find_exe(self):
+        exe = self.locate_exe()
+        self.exe_path = exe
+        self.open_exe_button.configure(state="normal" if exe else "disabled")
+        return exe
 
     def choose_iso(self):
         if self.worker and self.worker.is_alive():
@@ -306,6 +449,7 @@ class Builder(tk.Tk):
         self.source_count = None
         self.last_update = 0
         self.percent = 0
+        self.set_stage("copy" if mode == "copy" else "setup")
         self.set_percent(0, "Iniciando")
         self.full_button.configure(state="disabled")
         self.resume_button.configure(state="disabled")
@@ -405,6 +549,7 @@ class Builder(tk.Tk):
 
     def prepare_and_build(self, mode):
         self.env = os.environ.copy()
+        self.send("stage", "verify")
         for program in ("git", "clang", "cmake"):
             if not self.tool(program):
                 raise RuntimeError(f"Ferramenta ausente: {program}. Veja 'Verificar ferramentas'.")
@@ -412,6 +557,7 @@ class Builder(tk.Tk):
             if not self.tool(program):
                 raise RuntimeError(f"LLVM incompleto: {program} não encontrado.")
         self.send("progress", 5, "Ferramentas verificadas")
+        self.send("stage", "extract")
         ISO_DIR.mkdir(parents=True, exist_ok=True)
         elf = ISO_DIR / "SCUS_971.77"
         if not elf.exists():
@@ -452,10 +598,12 @@ class Builder(tk.Tk):
         self.run_command(cmd, "Compilando e vinculando o jogo..." if mode == "full" else
                          "Continuando a linkagem...", env=self.env)
         self.check_cancel()
-        # A clean build prints the final exe location only after a successful link/copy.
-        if not any(CLEAN.glob("*/manifest.json")):
-            raise RuntimeError("O build encerrou sem manifesto. Confira build/port/clean/logs/.")
-        self.send("progress", 100, "Build concluído")
+        self.send("stage", "finalize")
+        # 100% só pode aparecer quando a compilação gerou um executável válido.
+        output = self.locate_exe()
+        if output is None:
+            raise RuntimeError("O build terminou sem dhd.exe e manifesto válidos. Confira build/port/clean/logs/.")
+        self.send("log", "Executável confirmado: " + str(output))
 
     def finish(self, success, message, mode):
         self.cancel_button.configure(state="disabled")
@@ -463,21 +611,24 @@ class Builder(tk.Tk):
         self.resume_button.configure(state="normal")
         self.iso_button.configure(state="normal")
         self.process = None
-        if self.bar.cget("mode") == "indeterminate":
-            self.bar.stop()
-            self.bar.configure(mode="determinate")
         if success:
             if mode == "copy":
                 self.status.set(message)
-                self.set_percent(100, "ISO copiada")
+                self.set_percent(100, "ISO copiada com sucesso")
+                self.set_stage("copied")
             else:
                 exe = self.find_exe()
-                self.status.set(message if exe else "O script terminou, mas não foi encontrado dhd.exe.")
-                self.set_percent(100, "Finalizado")
                 if exe:
+                    self.status.set(message)
+                    self.set_percent(100, "dhd.exe gerado e localizado com sucesso")
+                    self.set_stage("done")
                     self.log("Executável: " + str(exe))
+                else:
+                    self.status.set("O script terminou, mas o arquivo dhd.exe não foi encontrado.")
+                    self.set_stage("failed")
         else:
             self.status.set(message)
+            self.set_stage("failed")
             self.log(message)
         self.check_existing()
         if self.closing:
