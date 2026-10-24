@@ -953,7 +953,6 @@ static void apply_setting(const char *key, const char *value)
         {"scale", "DHD_SCALE"}, {"widescreen", "DHD_WIDESCREEN"}, {"msaa", "DHD_MSAA"}, {"fxaa", "DHD_FXAA"},
         {"filter", "DHD_FILTER"}, {"vibration", "DHD_VIBRATION"}, {"remap", "DHD_REMAP"}, {"memory_card", "DHD_MEMCARD"},
         {"sound_latency_ms", "DHD_SND_LATENCY_MS"},
-        {"server", "DHD_NET_SERVER"}, {"host_directory", "DHD_HOST_DIRECTORY"},
         {"host_address", "DHD_HOST_ADDRESS"},
         {"name", "DHD_NET_NAME"}, {"rider", "DHD_NET_RIDER"},  /* online (port/online) */
         {"update_url", "DHD_UPDATE_URL"}, {"auto_update", "DHD_AUTO_UPDATE"},  /* the updater (update.c) */
@@ -1026,10 +1025,6 @@ int host_setting_locked(const char *name)
     return list && strstr(list, key) != NULL;
 }
 
-/* The official public race server (online/server, deployed by the project). DHD_NET_SERVER or
-   a "server =" line with an address replaces it, for anyone running their own. */
-#define OFFICIAL_SERVER "wss://dhd-online.downhill-revived.workers.dev"
-
 static int settings_has(const char *key);
 
 /* Defaults for a player's new installation, matching the preconfigured
@@ -1066,7 +1061,6 @@ void host_settings_load(void)
     if (f || !getenv("DHD_HEADLESS"))
         for (unsigned i = 0; i < sizeof player_defaults / sizeof *player_defaults; i++)
             if (!settings_has(player_defaults[i][0])) setting(player_defaults[i][2], player_defaults[i][1]);
-    setting("DHD_NET_SERVER", OFFICIAL_SERVER);  /* no server set (an empty "server =" sets none) */
 }
 
 /* Whether dhd.ini has a line for key. */
@@ -1112,16 +1106,10 @@ static const char settings_template[] =
     "; Online always uses 60. Frame rate changes apply at the next start.\n"
     "fps = 60\n"
     "\n"
-    "; Online races use the official server, wss://dhd-online.downhill-revived.workers.dev, when\n"
-    "; server is empty. To use a server of your own, put its address here, for example\n"
-    ";   server = wss://races.example.org\n"
-    "server =\n"
-    "; Optional: directory that resolves H-prefixed player-hosted room codes.\n"
-    "; Use a separate Cloudflare Worker if you cannot deploy on the official server.\n"
-    "; host_directory = wss://your-online-directory.workers.dev\n"
-    "; Optional: join an H-code directly at the host's address, with no directory at all.\n"
-    "; The host must accept TCP 8787 (same LAN, a VPN, or a forwarded router port).\n"
-    "; host_address = 192.168.0.10\n"
+    "; LAN/Radmin races run on a player's PC. Public rooms use UDP 8788 discovery; all\n"
+    "; connections use TCP 8787. To find a host across a VPN where broadcast fails, enter\n"
+    "; its Radmin IP here. A private room also requires its six-character H-code.\n"
+    "; host_address = 26.1.2.3\n"
     "\n"
     "; At start the game looks for a newer release and offers it; online races need the newest.\n"
     "; auto_update = ask (asks first), on (updates without asking) or off (never looks).\n"

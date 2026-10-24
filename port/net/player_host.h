@@ -5,12 +5,11 @@
 
 enum { PLAYER_HOST_STOPPED = 0, PLAYER_HOST_STARTING = 1,
        PLAYER_HOST_READY = 2, PLAYER_HOST_FAILED = 3 };
-/* Start/stop the built-in listener. Only called when the user selects
-   ONLINE > Host A Private Game. The public Cloudflare mode is untouched. */
+/* Start/stop the built-in listener for local public or private rooms. */
 int player_host_start(void);
+void player_host_set_public(int enabled);
 int player_host_state(void);
 const char *player_host_error(void);
-int player_host_directory_state(void);
 void player_host_stop(void);
 
 #endif

@@ -111,31 +111,23 @@ In dhd.ini:
     update_url =         where to look; empty means the official releases on GitHub. It can
                          name a latest.json of your own (version, url of the zip, its sha256).
 
-Online races (experimental)
-Choose ONLINE in the main menu: create a public or private race, or join one from the list or
-with its code. It works out of the box, on the project's official server
-(wss://dhd-online.downhill-revived.workers.dev). Every player needs the same USA disc image,
-and the newest version of the game: an older one is told "A new version is out. Update to play
-online." and offered Update Now.
-Player Hosted (optional): ONLINE > Host A Private Game (Your PC).
-A native WebSocket server is now built directly into dhd.exe. It automatically
-starts and creates a private six-character room code. Friends enter via the
-normal ONLINE > Join With A Code; it allows up to 8 players. The host closes
-the server by leaving the room or exiting dhd.exe.
-NO Node.js, npm, PowerShell, scripts, or online/server directory is required
-for hosting. Players need only the released dhd.exe and their own compatible
-USA ISO; the game and its ISO are distributed separately. The original
-Cloudflare online mode continues as before.
-For internet hosting the PC must accept TCP 8787, and the Cloudflare private
-code directory must be deployed with the new endpoints. CGNAT may require a
-public IP or tunnel, and this direct connection does not use TLS.
+Online races over LAN/Radmin (experimental)
+ONLINE > Host A Public Race starts the built-in server on your PC. Players on the
+same LAN/Radmin network can choose Public Races and join without typing a room
+code. Discovery uses UDP 8788; the race itself connects directly over TCP 8787.
+If VPN broadcast does not show the host, enter its Radmin IPv4 address in Host IP
+on the joining PC and refresh Public Races. The host's Windows firewall must
+allow these ports for players on that network.
 
-Running your own dedicated server is optional: put its address on the
-"server =" line of dhd.ini, e.g.
-    server = wss://races.example.org
-A server of your own can keep an older version playing (its MIN_VERSION setting); then point
-update_url at your own latest.json, or set auto_update = off.
-
+ONLINE > Host A Private Race starts a room with a six-character H-code. A friend
+enters the host's Radmin IPv4 address in Host IP, then uses Join With A Code.
+Two copies on the same PC can use the code without setting Host IP. Public rooms
+also display a code, but the LAN list does not require it. Up to eight players
+can join. Everyone needs a compatible USA ISO and the same game version.
+Leaving the room or exiting the game stops the host. No Cloudflare directory,
+public internet relay, Node.js, scripts, or automatic router port forwarding is
+used for multiplayer. The host PC performs the room relay and simulation stays
+on each player's PC.
 Known gaps
 - Movies are shown 4:3 in widescreen, as on the PS2.
 - The 2-4 player split screens have not been checked in widescreen.

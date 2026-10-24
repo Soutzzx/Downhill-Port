@@ -115,6 +115,14 @@ def run():
         assert len(code) == 6
         room = recv_type(host, "room")
         assert len(room["members"]) == 1
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as discovery:
+            discovery.settimeout(0.2)
+            discovery.sendto(b"DHD-LAN-1", (HOST, 8788))
+            try:
+                discovery.recvfrom(180)
+                raise AssertionError("private room appeared in LAN discovery")
+            except socket.timeout:
+                pass
 
         # A second EXE would resolve the same code through localhost.
         with socket.create_connection((HOST, PORT), 3) as s:
@@ -176,5 +184,32 @@ def run():
             proc.kill()
 
 
+def public_discovery(executable):
+    proc = subprocess.Popen([executable, "--public"], stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    host = None
+    try:
+        assert proc.stdout.readline().strip() == "NATIVE_HOST_READY"
+        host = ws("/v1/rooms/new")
+        code = hello(host, "HOST")["code"]
+        assert recv_type(host, "room")["public"]
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as discovery:
+            discovery.settimeout(2)
+            discovery.sendto(b"DHD-LAN-1", (HOST, 8788))
+            answer, sender = discovery.recvfrom(180)
+            assert answer.startswith(b"DHD-LAN-1 " + code.encode() + b" 1 8 "), answer
+            assert sender[0] == HOST
+        print("Public LAN discovery and private-room privacy: PASS")
+    finally:
+        if host:
+            host.close()
+        proc.terminate()
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
 if __name__ == "__main__":
     run()
+    public_discovery(sys.argv[1] if len(sys.argv) > 1 else "native_host_test.exe")

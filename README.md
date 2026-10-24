@@ -48,7 +48,7 @@ What works today:
 - **EXIT GAME** in the main menu.
 - **Online races** for 2 to 4 players (experimental): an ONLINE entry in the main menu, a list of
   public races, private races joined with a 6-character code, and a race room where the host
-  picks the track, on the project's official server (see [Online](#online)). After the
+  picks the track, hosted directly on a player's PC over LAN/Radmin (see [Online](#online)). After the
   results the game goes back to offline play with your own controller (TRY AGAIN, NEW LEVEL or
   QUIT).
 - **Memory card saves**, stored as plain files beside the game.
@@ -158,32 +158,25 @@ keys above stand for them.
 
 ### Online
 
-Online works out of the box: choose ONLINE in the main menu to create a public or private race,
-or join one from the list or with its code. **Player Hosted** is an additional private-room mode. Selecting
-**Host A Private Game (Your PC)** starts the **native WebSocket server
-embedded directly in dhd.exe**; it creates a private six-character H-code.
-Friends choose **Join With A Code** and enter that code, as with normal
-private rooms. On leaving the room or closing the game, the embedded server
-stops. **No Node.js, npm, PowerShell, scripts, or online/server folder is
-needed on any player's PC. Just dhd.exe and each player's own compatible ISO.**
-Internet hosts need TCP 8787 reachable and an active room-code directory
-(the directory is public infrastructure, not an extra file).
+Choose **ONLINE > Host A Public Race (Your PC)** to appear in the **Public Races**
+list on the LAN/Radmin network; friends join without a code. The list uses UDP
+8788 and races connect directly to the host on TCP 8787. If VPN broadcast does
+not reach the host, friends can enter the host's Radmin IPv4 address under
+**Host IP** and refresh the list. **Host A Private Race (Your PC)** creates a
+six-character H-code; friends enter the same host IP and choose **Join With A
+Code**. Two copies on one PC can join with the code without setting Host IP.
+The embedded server stops when the host leaves. No Cloudflare server, external
+directory, Node.js, scripts, or router port mapping is used for multiplayer.
 See [Player Hosted setup and limitations](docs/PLAYER-HOSTED.md).
-The game uses the project's official server,
-`wss://dhd-online.downhill-revived.workers.dev`. Different ISO dumps can play
+Different ISO dumps can play
 together when they contain the **same verified USA SCUS_971.77 game executable**.
 The online mode no longer requires identical SHA-256 hashes of the entire ISO.
 Images with a changed executable or another region are still unsupported;
 other disc-file changes can still cause missing resources or desyncs. All players
 should use the same newly compiled port version.
 
-Running your own server is optional. `online/server/` is the server (Cloudflare Workers), and
-[online/server/README.md](online/server/README.md) explains how to deploy it. Then put its
-address on the `server =` line of `dhd.ini` (the game writes the file at the first start):
-
-    server = wss://YOUR-SERVER-ADDRESS
-
-An empty `server =` line means the official server.
+The old `online/server/` source remains for future work and is not part of the
+current player flow.
 
 ### Texture packs
 
@@ -216,11 +209,11 @@ first start. The PC SETTINGS page writes most of them for you.
 | `texture_cache_mb` | half the card's memory, at most 2048 | graphics memory for replacements |
 | `auto_update` | `ask` | `ask`, `on` (update without asking) or `off` (never look) |
 | `update_url` | (empty) | where to look for updates; empty: this project's GitHub releases |
-| `server` | (empty) | the online server; empty: the official one |
+| `host_address` | (empty) | host's Radmin IPv4 address for directed public discovery or private code joining |
 | `font` | `sharp` | `original` draws the game's font as the PS2 does |
 
-Each key has a `DHD_*` environment variable (`scale` is `DHD_SCALE`, `server` is
-`DHD_NET_SERVER`; see [docs/BUILDING.md](docs/BUILDING.md)), which wins over the file.
+Each key has a `DHD_*` environment variable (`scale` is `DHD_SCALE`,
+`host_address` is `DHD_HOST_ADDRESS`; see [docs/BUILDING.md](docs/BUILDING.md)), which wins over the file.
 
 ### System requirements
 

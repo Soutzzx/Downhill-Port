@@ -1,6 +1,7 @@
-/* net.h's API: one client (client.c) over one WebSocket (ws_winhttp.c). The relay's address
-   comes from net_init or the DHD_NET_SERVER environment variable (the official server unless
-   dhd.ini or the environment names another, port/hle/host.c). */
+/* net.h's API: one client over the game's embedded LAN/VPN host. */
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
 #include "net.h"
 
 #include <ctype.h>
@@ -59,7 +60,7 @@ static int on_tick(void *ctx)
 
 void net_init(const char *base_url, const char *player_name, const char *build_version, const char *iso_sha256)
 {
-    const char *url = base_url && *base_url ? base_url : getenv("DHD_NET_SERVER");
+    const char *url = base_url;
     size_t n;
     if (!inited) {
         InitializeCriticalSection(&api);
@@ -87,7 +88,7 @@ static int connect_to(const char *path)
     client_init(&client, name, version, iso);
     if (!base[0]) {
         client.lobby.state = NET_FAILED;
-        snprintf(client.lobby.error, sizeof client.lobby.error, "no server: set DHD_NET_SERVER");
+        snprintf(client.lobby.error, sizeof client.lobby.error, "no local host address");
         LeaveCriticalSection(&api);
         return -1;
     }
@@ -103,19 +104,12 @@ int net_create_room(void)
     return connect_to("/v1/rooms/new");
 }
 
-/* A six-character private code works for BOTH transports. The public
-   server only maps the code to the player's address and never relays hosted
-   race frames. If there is no registered direct host, continue with the
-   original public online service without changing its networking path. */
+/* H-codes are verified by the host at localhost or the configured LAN/VPN IP. */
 int net_find_player_host(const char *code, char *url, size_t capacity)
 {
     char request[350], body[512], resolved[192];
-    const char *registry = getenv("DHD_HOST_DIRECTORY");
-    if (!registry || !*registry) registry = getenv("DHD_NET_SERVER");
     if (!url || capacity == 0) return 0;
     url[0] = 0;
-    /* Ordinary codes take the existing server path without an additional
-       HTTP request. Player Hosted local relays issue H-prefixed codes. */
     if (!code || strlen(code) != 6 || toupper((unsigned char)code[0]) != 'H')
         return 0;
     for (const char *c = code; *c; c++)
@@ -146,15 +140,7 @@ int net_find_player_host(const char *code, char *url, size_t capacity)
             return 1;
         }
     }
-    if (!registry || !*registry) return 0; /* offline same-PC testing still works */
-    snprintf(request, sizeof request, "%s/v1/player-host/%s", registry, code);
-    if (http_get(request, body, sizeof body) <= 0 ||
-        !json_string(body, "url", resolved, sizeof resolved)) return 0;
-    if (strncmp(resolved, "ws://", 5) || strlen(resolved) + 1 > capacity ||
-        strchr(resolved + 5, '/') || strchr(resolved + 5, '@'))
-        return 0;
-    snprintf(url, capacity, "%s", resolved);
-    return 1;
+    return 0;
 }
 
 int net_join_room(const char *code)
@@ -187,29 +173,46 @@ void net_leave(void)
 
 int net_list_lobbies(NetLobbyInfo *out, int max)
 {
-    static char body[64 * 1024];
-    char url[300], path[48];
-    int i, n;
-    snprintf(url, sizeof url, "%s/v1/lobbies", base);
-    if (!base[0] || http_get(url, body, sizeof body) < 0 || (n = json_count(body, "lobbies")) < 0)
-        return -1;
-    if (n > max)
-        n = max;
-    for (i = 0; i < n; i++) {
-        NetLobbyInfo *l = &out[i];
-        long long v;
-        memset(l, 0, sizeof *l);
-#define FIELD(key) (snprintf(path, sizeof path, "lobbies[%d]." key, i), path)
-        json_string(body, FIELD("code"), l->code, sizeof l->code);
-        json_string(body, FIELD("roomName"), l->room_name, sizeof l->room_name);
-        json_string(body, FIELD("version"), l->version, sizeof l->version);
-        json_string(body, FIELD("hostName"), l->host_name, sizeof l->host_name);
-        l->track = json_int(body, FIELD("track"), &v) ? (int)v : 0;
-        l->players = json_int(body, FIELD("players"), &v) ? (int)v : 0;
-        l->max_players = json_int(body, FIELD("maxPlayers"), &v) ? (int)v : 0;
-#undef FIELD
+    WSADATA wsa;
+    if(WSAStartup(MAKEWORD(2,2),&wsa))return -1;
+    SOCKET fd=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
+    if(fd==INVALID_SOCKET){WSACleanup();return -1;}
+    int yes=1, count=0;
+    setsockopt(fd,SOL_SOCKET,SO_BROADCAST,(const char*)&yes,sizeof yes);
+    struct sockaddr_in target;
+    memset(&target,0,sizeof target);
+    target.sin_family=AF_INET;
+    target.sin_port=htons(8788);
+    target.sin_addr.s_addr=htonl(INADDR_BROADCAST);
+    sendto(fd,"DHD-LAN-1",9,0,(struct sockaddr*)&target,sizeof target);
+    const char *direct=getenv("DHD_HOST_ADDRESS");
+    if(direct&&InetPtonA(AF_INET,direct,&target.sin_addr)==1)
+        sendto(fd,"DHD-LAN-1",9,0,(struct sockaddr*)&target,sizeof target);
+    DWORD until=GetTickCount()+1000;
+    while(count<max&&(int)(until-GetTickCount())>0){
+        fd_set read_set; FD_ZERO(&read_set);FD_SET(fd,&read_set);
+        struct timeval wait={0,100000};
+        if(select(0,&read_set,NULL,NULL,&wait)<=0)continue;
+        struct sockaddr_in sender;int sender_len=sizeof sender;
+        char reply[180],code[8],build[64];int players,limit,track;
+        int n=recvfrom(fd,reply,sizeof reply-1,0,(struct sockaddr*)&sender,&sender_len);
+        if(n<=0)continue;
+        reply[n]=0;
+        if(sscanf(reply,"DHD-LAN-1 %7s %d %d %d %63s",code,&players,&limit,&track,build)!=5||
+           strlen(code)!=6||code[0]!='H'||players<1||limit<2||players>limit||limit>8)continue;
+        char ip[INET_ADDRSTRLEN];
+        if(!InetNtopA(AF_INET,&sender.sin_addr,ip,sizeof ip))continue;
+        int duplicate=0;
+        for(int i=0;i<count;i++)if(!strcmp(out[i].address,ip))duplicate=1;
+        if(duplicate)continue;
+        NetLobbyInfo *l=&out[count++];memset(l,0,sizeof *l);
+        snprintf(l->code,sizeof l->code,"%s",code);
+        snprintf(l->room_name,sizeof l->room_name,"Local race");
+        snprintf(l->version,sizeof l->version,"%s",build);
+        snprintf(l->address,sizeof l->address,"%s",ip);
+        l->players=players;l->max_players=limit;l->track=track;
     }
-    return n;
+    closesocket(fd);WSACleanup();return count;
 }
 
 void net_set_room(const NetRoomSettings *s) { client_set_room(&client, s); }

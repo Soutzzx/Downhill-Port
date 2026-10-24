@@ -88,6 +88,7 @@ typedef struct {
 
 typedef struct {
     char code[8], room_name[100], version[64], host_name[100];
+    char address[64]; /* LAN discovery: ws://host:8787 */
     int track, players, max_players;
 } NetLobbyInfo;
 
@@ -99,12 +100,10 @@ typedef struct {
 void net_init(const char *base_url, const char *name, const char *version, const char *iso_sha256);
 int net_create_room(void);
 int net_join_room(const char *code);   /* -1 when the code can't be one */
-/* Resolve a private code through the lightweight public room directory.
-   Returns the direct ws:// address if hosted by a player's PC, or 0 for a
-   normal Cloudflare room (or if no registration is reachable). */
+/* Resolve an H-code at localhost or the player's configured LAN/VPN host IP. */
 int net_find_player_host(const char *code, char *url, size_t capacity);
 void net_leave(void);
-/* Public lobbies (blocking HTTP GET); returns how many, -1 on error. */
+/* Public LAN lobbies found through UDP broadcast; returns how many. */
 int net_list_lobbies(NetLobbyInfo *out, int max);
 void net_set_room(const NetRoomSettings *s);       /* host */
 void net_pick(int member, int rider, int bike);    /* member -1: this PC */

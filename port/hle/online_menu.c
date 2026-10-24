@@ -40,7 +40,7 @@ static const struct { int index; const char *name; } riders[] = {
 
 static const char code_letters[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  /* the server's join codes */
 static const char name_letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
-/* A host's address for H-codes without a directory (net_find_player_host): ip or ip:port. */
+/* A host's LAN/Radmin address for H-codes and directed public discovery. */
 static const char address_letters[] = "0123456789.:ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
 enum { NAME_MAX = 12, CODE_LENGTH = 6, ADDRESS_MAX = 40, ROW_TEXT = 96, MAX_ROWS = 16, LIST_MAX = 8, MEMBER_ROWS = NET_MAX_SLOTS };
 
@@ -67,13 +67,13 @@ static int choosing, selected, selection_requested, room_focus;
    while the camera flies to the rider screen it opens over; hold_rider until the press that
    closed it is released; resume_home: back on the title, ONLINE opens again. */
 static int in_shell, room_pending, hold_rider, resume_home;
-/* 0 means the existing public server. Hosted mode is used only while
-   creating a room on the local relay; code-based joining resolves both. */
+/* Hosted mode creates a room on the embedded relay. */
 static int hosted_mode;
 /* Track whether the rider screen was really reached; intermediate menu 15
    is also used while navigating to it and must not close customization. */
 static int visited_rider_screen, host_code_unresolved, host_code_direct;
-enum { HOME_ADDRESS = 5, HOME_HOST = 6, HOME_UPDATE = 7 };
+enum { HOME_LIST = 1, HOME_PUBLIC = 2, HOME_PRIVATE = 3, HOME_JOIN = 4,
+       HOME_ADDRESS = 5, HOME_UPDATE = 6 };
 static int chosen_rider, chosen_bike, ready_track, ready_options;
 static int public_room, room_settings_sent, room_ready_sent, room_track = 0, room_options;
 static int32_t chosen_outfit[3], chosen_cycle[3];
@@ -208,16 +208,9 @@ static void reset_selection(void)
 }
 
 static char text[MAX_ROWS][ROW_TEXT], status[128], footer[128];
-static int outdated;  /* the server refused this release: HOME offers Update Now (row 5) */
+static int outdated;  /* version mismatch: HOME offers Update Now */
 /* 44 characters: the footer fits about 45 at 640 wide (0.1.0 shows the server's copy there too) */
 static const char outdated_text[] = "A new version is out. Update to play online.";
-
-static const char *server(void)
-{
-    if (hosted_mode) return "ws://127.0.0.1:8787";
-    const char *s = getenv("DHD_NET_SERVER");
-    return s && *s ? s : NULL;
-}
 
 /* ---- Check the disc's executable, not the entire ISO, on a worker thread. ---- */
 
@@ -302,7 +295,6 @@ static void save(const char *key, const char *env, const char *value)
 static const char *not_ready(void)
 {
     const char *render = getenv("DHD_RENDER");
-    if (!server()) return "No server: set server = ... in dhd.ini";
     if (!render || strcmp(render, "native")) return "Online races need the native renderer";
     if (iso_state == 1) return "Checking game compatibility...";
     if (iso_state != 2) return "Requires compatible USA SCUS-97177 ISO";
@@ -343,46 +335,38 @@ static void start_list(void)
 {
     if (list_state == 1) return;
     list_state = 1;
-    net_init(server(), name, version, iso_hash);
     HANDLE t = CreateThread(NULL, 0, fetch_list, NULL, 0, NULL);
     if (t) CloseHandle(t);
     else list_state = 2, list_count = -1;
 }
 
-static void enter_room(int create, const char *code)
+static void enter_room(int create, const char *code, const char *found_address)
 {
     const char *why = not_ready();
     if (why) {
         snprintf(status, sizeof status, "%s", why);
         return;
     }
-    /* H-prefixed codes ALWAYS target Player Hosted and are NEVER routed
-       to the Cloudflare race relay. The public server remains available
-       through its own Create/Join options and regular room codes. */
+    /* All rooms are on a player's PC. Public discovery supplies an address;
+       private joining uses the H-code plus localhost or the configured IP. */
     if (!create && !hosted_mode) {
         char direct[192];
-        int is_host_code = code && strlen(code) == CODE_LENGTH &&
-                           (code[0] == 'H' || code[0] == 'h');
-        host_code_direct = is_host_code &&
-                           net_find_player_host(code, direct, sizeof direct);
-        host_code_unresolved = is_host_code && !host_code_direct;
+        if(found_address&&*found_address)
+            snprintf(direct,sizeof direct,"ws://%s:8787",found_address);
+        else if(!net_find_player_host(code,direct,sizeof direct))direct[0]=0;
+        host_code_direct = direct[0]!=0;
+        host_code_unresolved = !host_code_direct;
         if (host_code_direct) {
             net_init(direct, name, version, iso_hash);
             hle_log("online menu: joining native Player Hosted room %s via %s\n", code, direct);
         } else if (host_code_unresolved) {
-            snprintf(status, sizeof status, "Host code not online. Check host / directory");
-            hle_log("online menu: native H-code %s is not registered; no cloud fallback\n", code);
+            snprintf(status, sizeof status, "Set Host IP to the host's Radmin IP");
+            hle_log("online menu: cannot find local H-code %s\n", code);
             return;
-        } else {
-            net_init(server(), name, version, iso_hash);
         }
     } else {
         host_code_unresolved = host_code_direct = 0;
-        /* The native host runs INSIDE dhd.exe. Creating the room against
-           Cloudflare instead would give us a cloud code and leave the
-           native host with zero members, never published in the directory. */
-        net_init(hosted_mode && create ? "ws://127.0.0.1:8787" : server(),
-                 name, version, iso_hash);
+        net_init("ws://127.0.0.1:8787",name,version,iso_hash);
     }
     if (create) net_create_room();
     else if (net_join_room(code) < 0) {
@@ -393,7 +377,6 @@ static void enter_room(int create, const char *code)
     choosing = 0;
     visited_rider_screen = 0;
     selection_requested = 1;
-    public_room = !hosted_mode && create == 2;
     room_settings_sent = !create;  /* a guest who becomes host keeps the room as it is */
     room_ready_sent = 0;
     hle_log("online menu: %s %s\n", create ? "creating a room" : "joining", create ? (public_room ? "(public)" : "(private)") : code);
@@ -407,24 +390,23 @@ static void page_build(MenuPage *p)
         p->title = "ONLINE";
         snprintf(text[0], ROW_TEXT, "Name:\t\t%s", name);
         menu_page_row(p, text[0], 1);
-        menu_page_row(p, "Public Races", 1);
-        menu_page_row(p, "Create A Public Race", 1);
-        menu_page_row(p, "Create A Private Race", 1);
+        menu_page_row(p, "Public Races (LAN/Radmin)", 1);
+        menu_page_row(p, "Host A Public Race (Your PC)", 1);
+        menu_page_row(p, "Host A Private Race (Your PC)", 1);
         menu_page_row(p, "Join With A Code", 1);
         {
             const char *address = getenv("DHD_HOST_ADDRESS");
-            snprintf(text[1], ROW_TEXT, "Host IP:\t\t%s", address && *address ? address : "AUTO");
+            snprintf(text[1], ROW_TEXT, "Host IP:\t\t%s", address && *address ? address : "LAN AUTO");
             menu_page_row(p, text[1], 1);
         }
-        menu_page_row(p, "Host A Private Game (Your PC)", 1);
         if (outdated) menu_page_row(p, "Update Now", 1);
         break;
     case LIST:
-        p->title = "PUBLIC RACES";
+        p->title = "LOCAL RACES";
         list_shown = list_state == 2;
         if (list_state != 2) menu_page_row(p, "Looking for races...", 0);
-        else if (list_count < 0) menu_page_row(p, "The server didn't answer", 0);
-        else if (list_count == 0) menu_page_row(p, "No public races right now", 0);
+        else if (list_count < 0) menu_page_row(p, "LAN discovery unavailable", 0);
+        else if (list_count == 0) menu_page_row(p, "No LAN races; set Host IP if needed", 0);
         for (int i = 0; list_state == 2 && i < list_count; i++) {
             const NetLobbyInfo *l = &list[i];
             const char *track = "?";
@@ -488,7 +470,7 @@ static void room_update(MenuPage *p, NetLobby *l)
             snprintf(status, sizeof status, "Cannot reach host: check TCP 8787 / firewall");
         hle_log("online menu: refused: %s (%s)\n", l->error, l->error_code);
         net_leave();
-        player_host_stop(); /* only our local server; public games unaffected */
+        player_host_stop();
         reset_selection();
         if (too_old) home_row = HOME_UPDATE;
         if (in_shell) {  /* the rider screen's Back, then ONLINE again with the reason */
@@ -594,18 +576,12 @@ static void room_update(MenuPage *p, NetLobby *l)
     }
     /* what to do next, else what everyone waits for */
     if (status[0]) p->footer = status;
-    else if (hosted_mode && in && player_host_directory_state() == -2)
-        p->footer = "H-code rejected: update online directory";
-    else if (hosted_mode && in && player_host_directory_state() < 0)
-        p->footer = "H-code offline: check directory/internet";
-    else if (hosted_mode && in && !player_host_directory_state())
-        p->footer = "H-code registering; local join still works";
     else if (!in) p->footer = "No connection: Leave Room to give up";
     else if (conflict) p->footer = "Rider taken: change your selection";
     else if (!selected) p->footer = "Choose your rider, bike and outfit first";
     else if (l->nmembers < 2) {
         if (hosted_mode)
-            snprintf(footer, sizeof footer, "Host: TCP 8787 must be reachable remotely");
+            snprintf(footer, sizeof footer, "Share code/IP; TCP 8787 must be reachable");
         else
             snprintf(footer, sizeof footer, "Waiting for players: friends join with code %s", l->code);
         p->footer = footer;
@@ -649,10 +625,10 @@ static void page_update(MenuPage *p, int cursor)
     p->footer = status[0] ? status : NULL;
     switch (screen) {
     case HOME:
-        if (!status[0] && cursor == HOME_HOST)
-            p->footer = "Private native host (no Cloudflare relay)";
+        if (!status[0] && (cursor == HOME_PUBLIC || cursor == HOME_PRIVATE))
+            p->footer = "Host on this PC; friends connect directly";
         else if (!status[0] && cursor == HOME_ADDRESS)
-            p->footer = "Join H-codes at this IP (LAN/VPN), AUTO uses directory";
+            p->footer = "Radmin host IP; empty uses LAN discovery";
         else if (!status[0] && cursor >= 2 && cursor <= 4 && not_ready())
             p->footer = not_ready();
         break;
@@ -670,7 +646,7 @@ static void page_update(MenuPage *p, int cursor)
         entry_text();
         if (!status[0])
             p->footer = screen == CODE ? "TYPE/CTRL+V - ENTER JOIN - ESC BACK" :
-                        screen == ADDRESS ? "TYPE/CTRL+V - EMPTY = AUTO - ENTER DONE" :
+                        screen == ADDRESS ? "TYPE/CTRL+V - EMPTY = LAN - ENTER DONE" :
                         "TYPE OR PAD - ENTER DONE - ESC CANCEL";
         break;
     case HOST_BOOT: {
@@ -682,10 +658,7 @@ static void page_update(MenuPage *p, int cursor)
             go(HOME);
             snprintf(status, sizeof status, "%.120s", reason);
         } else if (state == PLAYER_HOST_READY) {
-            /* Native hosting never needs the directory or public race
-               server to start. Local joining works offline. Registration
-               affects only finding this H-code from another network. */
-            enter_room(1, NULL);
+            enter_room(1, NULL, NULL);
         } else p->footer = "Starting built-in multiplayer server...";
         break;
     }
@@ -708,15 +681,24 @@ static void page_accept(MenuPage *p, int row)
             snprintf(entry, sizeof entry, "%s", name);
             entry_pick = 0;
             go(NAME);
-        } else if (row == 1) {
-            if (!server()) snprintf(status, sizeof status, "No server: set server = ... in dhd.ini");
-            else {
-                start_list();
-                go(LIST);
+        } else if (row == HOME_LIST) {
+            start_list();
+            go(LIST);
+        } else if (row == HOME_PUBLIC || row == HOME_PRIVATE) {
+            public_room = row == HOME_PUBLIC;
+            hosted_mode = 1;
+            if (not_ready()) {
+                snprintf(status, sizeof status, "%s", not_ready());
+                hosted_mode = 0;
+            } else {
+                player_host_set_public(public_room);
+                if (player_host_start()) go(HOST_BOOT);
+                else {
+                    snprintf(status, sizeof status, "%.120s", player_host_error());
+                    hosted_mode = 0;
+                }
             }
-        } else if (row == 2 || row == 3)
-            enter_room(row == 2 ? 2 : 1, NULL);
-        else if (row == 4) {
+        } else if (row == HOME_JOIN) {
             entry[0] = 0;
             entry_pick = 0;
             go(CODE);
@@ -725,18 +707,6 @@ static void page_accept(MenuPage *p, int row)
             snprintf(entry, sizeof entry, "%s", address ? address : "");
             entry_pick = 0;
             go(ADDRESS);
-        } else if (row == HOME_HOST) {
-            hosted_mode = 1;
-            if (not_ready()) {
-                snprintf(status, sizeof status, "%s", not_ready());
-                hosted_mode = 0;
-            } else if (player_host_start()) {
-                go(HOST_BOOT);
-            }
-            else {
-                snprintf(status, sizeof status, "%.120s", player_host_error());
-                hosted_mode = 0;
-            }
         } else if (row == HOME_UPDATE && outdated) {
             hle_log("online menu: Update Now\n");
             update_request();  /* ends the game; the first dhd.exe updates and starts it again */
@@ -747,7 +717,8 @@ static void page_accept(MenuPage *p, int row)
         go(HOME);
         break;
     case LIST:
-        if (list_state == 2 && row < list_count && list_count > 0) enter_room(0, list[row].code);
+        if (list_state == 2 && row < list_count && list_count > 0)
+            enter_room(0, list[row].code, list[row].address);
         else if (list_state == 2) {
             start_list();
             menu_page_rebuild(p);
@@ -770,10 +741,10 @@ static void page_accept(MenuPage *p, int row)
             }
             go(HOME);
         } else if (screen == ADDRESS) {
-            save("host_address", "DHD_HOST_ADDRESS", entry);  /* empty: back to the directory */
+            save("host_address", "DHD_HOST_ADDRESS", entry);  /* empty: LAN discovery */
             go(HOME);
         } else if ((int)n == CODE_LENGTH)
-            enter_room(0, entry);
+            enter_room(0, entry, NULL);
         else
             snprintf(status, sizeof status, "A code has %d letters and digits", CODE_LENGTH);
         break;

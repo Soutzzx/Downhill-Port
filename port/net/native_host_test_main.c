@@ -2,8 +2,10 @@
 #include "native_host.h"
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 
-int main(void) {
+int main(int argc, char **argv) {
+    native_host_set_public(argc > 1 && !strcmp(argv[1], "--public"));
     if (!native_host_start()) {
         fprintf(stderr, "native host error: %s\n", native_host_error());
         return 1;

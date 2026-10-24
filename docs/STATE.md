@@ -1,5 +1,23 @@
 # State
 
+2026-10-24 local multiplayer change (finding 076): player-facing ONLINE now
+uses the embedded host for private H-code rooms and public LAN/Radmin rooms.
+Public discovery uses UDP 8788 and direct TCP 8787; VPN users can enter the
+host IP when broadcast fails. Cloudflare directory registration, public relay
+menu paths, default server address and linked UPnP mapping were removed from
+the player flow. The headless online route and race harness also use local
+hosting; the release packager rejects all workers.dev addresses. Historic
+Worker source stays unlinked. Source review completed; clean build and live LAN smoke remain
+open because Python and LLVM are unavailable in this environment. No claim
+that this changes the Defender verdict.
+
+2026-10-24 Defender triage (finding 075): local Defender confirms
+`Trojan:Win32/Wacatac.B!ml` on a recent clean-tree EXE and quarantines it.
+An earlier clean `a1a6bcbf` EXE scans clear on the same installation and already
+includes native hosting and direct VPN/IP joining. Cause and Microsoft verdict
+remain open; preserve the direct-host multiplayer path and do not distribute
+the detected build.
+
 Goal: readable, **matching** C/C++ decompilation of Downhill Domination (PS2, USA `SCUS_971.77`):
 source that rebuilds the retail executable byte for byte. Later it can serve as the base for a PC
 port. PCSX2 is the behavioural reference.

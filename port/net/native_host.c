@@ -1,4 +1,4 @@
-/* Native, single-EXE Player Hosted relay for Windows. No Node, Wrangler,
+/* Native, single-EXE Player Hosted relay for Windows. No external runtime,
    executable extraction or shell processes. The listener never runs the
    simulation: it only handles the v1 room protocol and relays race frames.
    One host, one private room, up to 8 players, on TCP 8787. */
@@ -8,7 +8,6 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <bcrypt.h>
-#include <winhttp.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -16,9 +15,8 @@
 #include <time.h>
 #include "json.h"
 #include "native_host.h"
-#include "nat_forward.h"
 
-enum { HOST_PORT = 8787, CLIENTS = 12, MAX_MEMBERS = 8, IN_CAP = 16384,
+enum { HOST_PORT = 8787, DISCOVERY_PORT = 8788, CLIENTS = 12, MAX_MEMBERS = 8, IN_CAP = 16384,
        OUT_CAP = 131072, FRAME_CAP = 4096, TICK_MS = 10 };
 #define WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define ALPHABET "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
@@ -43,13 +41,15 @@ typedef struct {
 static Peer peers[CLIENTS];
 static Member members[MAX_MEMBERS];
 static SOCKET listener = INVALID_SOCKET;
+static SOCKET discovery = INVALID_SOCKET;
 static HANDLE worker;
 static volatile LONG stop_requested, server_state;
+static volatile LONG public_room;
 static char error_message[160];
-static char room_code[7], host_token[37], build_version[70], iso_id[70];
+static char room_code[7], build_version[70], iso_id[70];
 static int host_id, member_count, next_id, max_players = 8, track, laps, racing;
 static uint32_t race_seed;
-static uint64_t start_at, last_ping, last_register;
+static uint64_t start_at, last_ping;
 static uint64_t last_field[MAX_MEMBERS];
 static CRITICAL_SECTION guard;
 static int guard_initialized;
@@ -71,6 +71,7 @@ static int random_bytes(unsigned char *buffer, size_t n) {
 }
 static void make_code(void) {
     unsigned char bytes[20];
+    room_code[0] = 0;
     if (!random_bytes(bytes, sizeof bytes)) {
         fail("Windows random generator is unavailable.");
         return;
@@ -78,12 +79,6 @@ static void make_code(void) {
     room_code[0] = 'H';
     for (int i = 1; i < 6; ++i) room_code[i] = ALPHABET[bytes[i] % (sizeof(ALPHABET)-1)];
     room_code[6] = 0;
-    /* Not a password; prevents other hosts overriding a live directory entry. */
-    snprintf(host_token, sizeof host_token,
-             "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-             bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],
-             bytes[6],bytes[7],bytes[8],bytes[9],bytes[10],bytes[11],
-             bytes[12],bytes[13],bytes[14],bytes[15]);
 }
 static void b64(const unsigned char *bytes, size_t len, char *out, size_t cap) {
     static const char abc[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -162,9 +157,9 @@ static void publish_room(void) {
     json_escape(version,sizeof version,build_version);
     int len=snprintf(msg,sizeof msg,
        "{\"type\":\"room\",\"code\":\"%s\",\"hostId\":%d,\"roomName\":\"Player Hosted\","
-       "\"public\":false,\"maxPlayers\":%d,\"started\":%s,\"version\":\"%s\","
+       "\"public\":%s,\"maxPlayers\":%d,\"started\":%s,\"version\":\"%s\","
        "\"settings\":{\"track\":%d,\"laps\":%d,\"seed\":%u},\"inputDelay\":1,\"members\":[",
-       room_code,host_id,max_players,racing?"true":"false",version,track,laps,race_seed);
+       room_code,host_id,public_room?"true":"false",max_players,racing?"true":"false",version,track,laps,race_seed);
     int first=1;
     for(int i=0;i<MAX_MEMBERS;i++){
         Member *m=&members[i]; if(m->peer<0)continue;
@@ -464,6 +459,7 @@ static DWORD WINAPI server_main(void *arg) {
         fd_set rd,wr;
         FD_ZERO(&rd);FD_ZERO(&wr);
         FD_SET(listener,&rd);
+        if(discovery!=INVALID_SOCKET)FD_SET(discovery,&rd);
         for(int i=0;i<CLIENTS;i++)if(peers[i].fd!=INVALID_SOCKET){
             FD_SET(peers[i].fd,&rd);
             if(peers[i].output_n)FD_SET(peers[i].fd,&wr);
@@ -471,6 +467,16 @@ static DWORD WINAPI server_main(void *arg) {
         struct timeval timeout={0,TICK_MS*1000};
         int r=select(0,&rd,&wr,NULL,&timeout);
         if(r==SOCKET_ERROR)break;
+        if(discovery!=INVALID_SOCKET&&FD_ISSET(discovery,&rd)){
+            char query[32], response[180];
+            struct sockaddr_in from; int from_size=sizeof from;
+            int n=recvfrom(discovery,query,sizeof query,0,(struct sockaddr*)&from,&from_size);
+            if(n==9&&!memcmp(query,"DHD-LAN-1",9)&&public_room&&member_count&&!racing){
+                int len=snprintf(response,sizeof response,"DHD-LAN-1 %s %d %d %d %s",
+                                 room_code,member_count,max_players,track,build_version);
+                sendto(discovery,response,len,0,(struct sockaddr*)&from,from_size);
+            }
+        }
         if(FD_ISSET(listener,&rd)){
             SOCKET incoming=accept(listener,NULL,NULL);
             if(incoming!=INVALID_SOCKET){
@@ -511,83 +517,12 @@ static DWORD WINAPI server_main(void *arg) {
 }
 
 
-/* The directory is only a private-code lookup. Its Worker stays online,
-   but race packets never pass through it. HTTPS registration uses the
-   host's public source IP; every connection to the local relay is direct. */
-static HANDLE registrar_thread, registrar_stop;
-/* 0 pending, 1 registered, -1 offline, -2 rejected (e.g. old Worker).
-   The HTTPS directory only maps H-codes to the host's IP: it never
-   carries gameplay packets and never changes the game's network route. */
-static volatile LONG directory_state;
-static int directory_register(void) {
-    const char *custom = getenv("DHD_HOST_DIRECTORY");
-    const char *base = custom && *custom ? custom :
-        "https://dhd-online.downhill-revived.workers.dev";
-    char uri[350];
-    if (!strncmp(base,"wss://",6)) snprintf(uri,sizeof uri,"https://%s/v1/player-host/register",base+6);
-    else if (!strncmp(base,"https://",8)) snprintf(uri,sizeof uri,"%s/v1/player-host/register",base);
-    else return -2; /* private directory over plaintext is never used */
-    wchar_t wide[400],host[256],path[256];
-    MultiByteToWideChar(CP_UTF8,0,uri,-1,wide,400);
-    URL_COMPONENTS u;
-    memset(&u,0,sizeof u);u.dwStructSize=sizeof u;
-    u.lpszHostName=host;u.dwHostNameLength=256;
-    u.lpszUrlPath=path;u.dwUrlPathLength=256;
-    if(!WinHttpCrackUrl(wide,0,0,&u)||u.nScheme!=INTERNET_SCHEME_HTTPS)return -2;
-    char payload[190];
-    snprintf(payload,sizeof payload,"{\"code\":\"%s\",\"port\":8787,\"token\":\"%s\"}",
-             room_code,host_token);
-    HINTERNET ses=WinHttpOpen(L"Downhill Revived native host",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
-    if(!ses)return -1;
-    WinHttpSetTimeouts(ses,2500,2500,3500,3500);
-    HINTERNET conn=WinHttpConnect(ses,host,u.nPort,0);
-    HINTERNET req=conn?WinHttpOpenRequest(conn,L"POST",path,NULL,WINHTTP_NO_REFERER,
-                         WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE):NULL;
-    int result=-1;
-    if(req){
-        static const wchar_t hdr[]=L"Content-Type: application/json\r\n";
-        if(WinHttpSendRequest(req,hdr,(DWORD)-1,payload,(DWORD)strlen(payload),
-                               (DWORD)strlen(payload),0) && WinHttpReceiveResponse(req,NULL)) {
-            DWORD status=0,size=sizeof status;
-            if(WinHttpQueryHeaders(req,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,
-                                   WINHTTP_HEADER_NAME_BY_INDEX,&status,&size,
-                                   WINHTTP_NO_HEADER_INDEX))
-                result=status==200?1:-2;
-        }
-        WinHttpCloseHandle(req);
-    }
-    if(conn)WinHttpCloseHandle(conn);
-    WinHttpCloseHandle(ses);
-    return result;
-}
-static DWORD WINAPI registrar_main(void *unused) {
-    (void)unused;
-    /* Never stop hosting when the registry is offline. Local connections
-       still work, and the registry can recover while the room remains up.
-       Retry failures after four seconds, keep successful 90s leases fresh
-       every twenty seconds. */
-    while(WaitForSingleObject(registrar_stop,300)==WAIT_TIMEOUT) {
-        int state=(int)InterlockedCompareExchange(&directory_state,0,0);
-        uint64_t interval=state==1?20000:4000;
-        if(!last_register || now_ms()-last_register>=interval) {
-            last_register=now_ms();
-            int result=directory_register();
-            InterlockedExchange(&directory_state,result);
-        }
-    }
-    return 0;
-}
-
 int native_host_start(void) {
     if(InterlockedCompareExchange(&server_state,0,0)==NATIVE_HOST_READY)return 1;
     native_host_stop();
     WSADATA data;
     if(WSAStartup(MAKEWORD(2,2),&data)!=0){fail("Winsock startup failed.");return 0;}
-    /* CF-Connecting-IP can be IPv6. The old listener was IPv4-only,
-       so the directory could register a valid IPv6 address that no guest
-       could ever reach. Prefer one IPv6 dual-stack socket, falling back
-       to IPv4 on Windows networks without IPv6 support. */
+    /* Accept local IPv4 and IPv6 clients on the same TCP port. */
     int bound=0, exclusive=1;
     listener=socket(AF_INET6,SOCK_STREAM,IPPROTO_TCP);
     if(listener!=INVALID_SOCKET){
@@ -624,45 +559,53 @@ int native_host_start(void) {
         return 0;
     }
     u_long asynchronous=1;ioctlsocket(listener,FIONBIO,&asynchronous);
+    discovery=socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);
+    if(discovery!=INVALID_SOCKET){
+        struct sockaddr_in address;
+        memset(&address,0,sizeof address);
+        address.sin_family=AF_INET;
+        address.sin_addr.s_addr=htonl(INADDR_ANY);
+        address.sin_port=htons(DISCOVERY_PORT);
+        if(bind(discovery,(struct sockaddr*)&address,sizeof address)!=0){
+            closesocket(discovery);discovery=INVALID_SOCKET;
+        } else ioctlsocket(discovery,FIONBIO,&asynchronous);
+    }
+    if(public_room&&discovery==INVALID_SOCKET){
+        closesocket(listener);listener=INVALID_SOCKET;WSACleanup();
+        fail("UDP 8788 is busy or blocked; public room unavailable.");
+        return 0;
+    }
     member_count=next_id=track=laps=racing=0;host_id=-1;
     max_players=8;build_version[0]=iso_id[0]=0;
-    last_ping=now_ms();last_register=0;
-    InterlockedExchange(&directory_state,0);
+    last_ping=now_ms();
     InterlockedExchange(&stop_requested,0);
     make_code();
-    if(!room_code[0])return 0;
+    if(!room_code[0]){
+        if(discovery!=INVALID_SOCKET){closesocket(discovery);discovery=INVALID_SOCKET;}
+        closesocket(listener);listener=INVALID_SOCKET;WSACleanup();return 0;
+    }
     worker=CreateThread(NULL,0,server_main,NULL,0,NULL);
-    if(!worker){closesocket(listener);listener=INVALID_SOCKET;WSACleanup();
+    if(!worker){
+        if(discovery!=INVALID_SOCKET){closesocket(discovery);discovery=INVALID_SOCKET;}
+        closesocket(listener);listener=INVALID_SOCKET;WSACleanup();
         fail("Cannot start the local relay thread.");return 0;}
-    registrar_stop=CreateEventW(NULL,TRUE,FALSE,NULL);
-    if(registrar_stop)registrar_thread=CreateThread(NULL,0,registrar_main,NULL,0,NULL);
-    nat_forward_start(); /* optional UPnP, asynchronous and nonfatal */
     InterlockedExchange(&server_state,NATIVE_HOST_READY);
     return 1;
 }
 int native_host_state(void){return InterlockedCompareExchange(&server_state,0,0);}
+void native_host_set_public(int enabled){InterlockedExchange(&public_room,enabled!=0);}
 const char *native_host_error(void){return error_message;}
-int native_host_directory_state(void) {
-    return (int)InterlockedCompareExchange(&directory_state,0,0);
-}
 int native_host_is_local_code(const char *code){
     return native_host_state()==NATIVE_HOST_READY&&member_count>0&&
            code&&strcmp(code,room_code)==0;
 }
 void native_host_stop(void){
-    nat_forward_stop(); /* remove only this game's UPnP mapping */
     InterlockedExchange(&stop_requested,1);
-    if(registrar_stop)SetEvent(registrar_stop);
-    if(registrar_thread){
-        WaitForSingleObject(registrar_thread,INFINITE);
-        CloseHandle(registrar_thread);registrar_thread=NULL;
-    }
-    if(registrar_stop){CloseHandle(registrar_stop);registrar_stop=NULL;}
     if(worker){
         WaitForSingleObject(worker,3000);
         CloseHandle(worker);worker=NULL;
     }
+    if(discovery!=INVALID_SOCKET){closesocket(discovery);discovery=INVALID_SOCKET;}
     if(listener!=INVALID_SOCKET){closesocket(listener);listener=INVALID_SOCKET;WSACleanup();}
-    InterlockedExchange(&directory_state,0);
     InterlockedExchange(&server_state,NATIVE_HOST_STOPPED);
 }
