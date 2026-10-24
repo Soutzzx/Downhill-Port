@@ -130,6 +130,22 @@ int net_find_player_host(const char *code, char *url, size_t capacity)
         snprintf(url, capacity, "%s", resolved);
         return 1;
     }
+    /* A guest who knows the host's address (LAN, VPN such as Radmin or
+       Tailscale, or a forwarded public IP) asks the host itself, so no
+       directory is needed. host_address is "ip" or "ip:port" (default 8787). */
+    const char *direct = getenv("DHD_HOST_ADDRESS");
+    if (direct && *direct && strlen(direct) < 64 &&
+        strspn(direct, "0123456789abcdefABCDEFghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ.-:") ==
+            strlen(direct)) {
+        const char *port = strchr(direct, ':') ? "" : ":8787";
+        snprintf(request, sizeof request, "http://%s%s/v1/player-host/%s", direct, port, code);
+        if (http_get(request, body, sizeof body) > 0 &&
+            json_string(body, "url", resolved, sizeof resolved) &&
+            strlen(direct) + strlen(port) + 6 <= capacity) {
+            snprintf(url, capacity, "ws://%s%s", direct, port);
+            return 1;
+        }
+    }
     if (!registry || !*registry) return 0; /* offline same-PC testing still works */
     snprintf(request, sizeof request, "%s/v1/player-host/%s", registry, code);
     if (http_get(request, body, sizeof body) <= 0 ||

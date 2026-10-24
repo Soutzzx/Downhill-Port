@@ -40,9 +40,11 @@ static const struct { int index; const char *name; } riders[] = {
 
 static const char code_letters[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";  /* the server's join codes */
 static const char name_letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
-enum { NAME_MAX = 12, CODE_LENGTH = 6, ROW_TEXT = 96, MAX_ROWS = 16, LIST_MAX = 8, MEMBER_ROWS = NET_MAX_SLOTS };
+/* A host's address for H-codes without a directory (net_find_player_host): ip or ip:port. */
+static const char address_letters[] = "0123456789.:ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
+enum { NAME_MAX = 12, CODE_LENGTH = 6, ADDRESS_MAX = 40, ROW_TEXT = 96, MAX_ROWS = 16, LIST_MAX = 8, MEMBER_ROWS = NET_MAX_SLOTS };
 
-enum { HOME, LIST, NAME, CODE, ROOM, HOST_BOOT };
+enum { HOME, LIST, NAME, CODE, ROOM, HOST_BOOT, ADDRESS };
 /* The room's rows */
 enum { R_CODE, R_TRACK, R_BOTS, R_SELECT, R_MEMBER };
 /* Keep player entries consecutive; action rows follow the last joined
@@ -71,7 +73,7 @@ static int hosted_mode;
 /* Track whether the rider screen was really reached; intermediate menu 15
    is also used while navigating to it and must not close customization. */
 static int visited_rider_screen, host_code_unresolved, host_code_direct;
-enum { HOME_HOST = 5, HOME_UPDATE = 6 };
+enum { HOME_ADDRESS = 5, HOME_HOST = 6, HOME_UPDATE = 7 };
 static int chosen_rider, chosen_bike, ready_track, ready_options;
 static int public_room, room_settings_sent, room_ready_sent, room_track = 0, room_options;
 static int32_t chosen_outfit[3], chosen_cycle[3];
@@ -310,14 +312,22 @@ static const char *not_ready(void)
 /* ---- the screens ---- */
 
 static int entry_pick;           /* the letter on offer */
-static char entry[16];
+static char entry[ADDRESS_MAX + 1];
 static int home_row;  /* HOME's row last chosen: the cursor goes back to it */
+
+/* NAME, CODE and ADDRESS are one typed field over the same page. */
+static int is_entry(void) { return screen == NAME || screen == CODE || screen == ADDRESS; }
+static const char *entry_letters(void)
+{
+    return screen == NAME ? name_letters : screen == CODE ? code_letters : address_letters;
+}
+static int entry_max(void) { return screen == NAME ? NAME_MAX : screen == CODE ? CODE_LENGTH : ADDRESS_MAX; }
 
 static void go(int to)
 {
     text_input_end();
     screen = to;
-    if (to == NAME || to == CODE) text_input_begin();
+    if (to == NAME || to == CODE || to == ADDRESS) text_input_begin();
     if (to == ROOM) room_focus = selected;
     if (to == HOME) {
         player_host_stop();
@@ -401,6 +411,11 @@ static void page_build(MenuPage *p)
         menu_page_row(p, "Create A Public Race", 1);
         menu_page_row(p, "Create A Private Race", 1);
         menu_page_row(p, "Join With A Code", 1);
+        {
+            const char *address = getenv("DHD_HOST_ADDRESS");
+            snprintf(text[1], ROW_TEXT, "Host IP:\t\t%s", address && *address ? address : "AUTO");
+            menu_page_row(p, text[1], 1);
+        }
         menu_page_row(p, "Host A Private Game (Your PC)", 1);
         if (outdated) menu_page_row(p, "Update Now", 1);
         break;
@@ -424,9 +439,10 @@ static void page_build(MenuPage *p)
         break;
     case NAME:
     case CODE:
-        p->title = screen == NAME ? "YOUR NAME" : "JOIN WITH A CODE";
+    case ADDRESS:
+        p->title = screen == NAME ? "YOUR NAME" : screen == CODE ? "JOIN WITH A CODE" : "HOST IP";
         menu_page_row(p, text[0], 1);  /* written every frame */
-        menu_page_row(p, screen == NAME ? "Done" : "Join", 1);
+        menu_page_row(p, screen == CODE ? "Join" : "Done", 1);
         break;
     case HOST_BOOT:
         p->title = "PLAYER HOSTED";
@@ -445,13 +461,13 @@ static void page_build(MenuPage *p)
 
 static void entry_text(void)
 {
-    const char *letters = screen == NAME ? name_letters : code_letters;
-    int max = screen == NAME ? NAME_MAX : CODE_LENGTH;
+    const char *letters = entry_letters();
+    const char *label = screen == NAME ? "Name:" : screen == CODE ? "Code:" : "IP:";
     char shown = letters[entry_pick] == ' ' ? '-' : letters[entry_pick];
-    if ((int)strlen(entry) < max)
-        snprintf(text[0], ROW_TEXT, "%s\t\t%s[%c]", screen == NAME ? "Name:" : "Code:", entry, shown);
+    if ((int)strlen(entry) < entry_max())
+        snprintf(text[0], ROW_TEXT, "%s\t\t%s[%c]", label, entry, shown);
     else
-        snprintf(text[0], ROW_TEXT, "%s\t\t%s", screen == NAME ? "Name:" : "Code:", entry);
+        snprintf(text[0], ROW_TEXT, "%s\t\t%s", label, entry);
 }
 
 static void room_update(MenuPage *p, NetLobby *l)
@@ -624,7 +640,7 @@ static void page_update(MenuPage *p, int cursor)
         static char last[160];
         char trace[160];
         snprintf(trace, sizeof trace, "view=%d row=%d entry=%s", screen, cursor,
-                 screen == NAME || screen == CODE ? entry : "");
+                 is_entry() ? entry : "");
         if (strcmp(last, trace)) {
             snprintf(last, sizeof last, "%s", trace);
             hle_log("online menu: %s\n", trace);
@@ -635,6 +651,8 @@ static void page_update(MenuPage *p, int cursor)
     case HOME:
         if (!status[0] && cursor == HOME_HOST)
             p->footer = "Private native host (no Cloudflare relay)";
+        else if (!status[0] && cursor == HOME_ADDRESS)
+            p->footer = "Join H-codes at this IP (LAN/VPN), AUTO uses directory";
         else if (!status[0] && cursor >= 2 && cursor <= 4 && not_ready())
             p->footer = not_ready();
         break;
@@ -643,15 +661,17 @@ static void page_update(MenuPage *p, int cursor)
         break;
     case NAME:
     case CODE:
+    case ADDRESS:
         {
-            int action = text_input_edit(entry, (screen == NAME ? NAME_MAX : CODE_LENGTH) + 1,
-                                         screen == NAME ? name_letters : code_letters);
+            int action = text_input_edit(entry, entry_max() + 1, entry_letters());
             if (action < 0) { go(HOME); return; }
             if (action > 0) { page_accept(p, 1); return; }
         }
         entry_text();
         if (!status[0])
-            p->footer = screen == CODE ? "TYPE/CTRL+V - ENTER JOIN - ESC BACK" : "TYPE OR PAD - ENTER DONE - ESC CANCEL";
+            p->footer = screen == CODE ? "TYPE/CTRL+V - ENTER JOIN - ESC BACK" :
+                        screen == ADDRESS ? "TYPE/CTRL+V - EMPTY = AUTO - ENTER DONE" :
+                        "TYPE OR PAD - ENTER DONE - ESC CANCEL";
         break;
     case HOST_BOOT: {
         int state = player_host_state();
@@ -700,6 +720,11 @@ static void page_accept(MenuPage *p, int row)
             entry[0] = 0;
             entry_pick = 0;
             go(CODE);
+        } else if (row == HOME_ADDRESS) {
+            const char *address = getenv("DHD_HOST_ADDRESS");
+            snprintf(entry, sizeof entry, "%s", address ? address : "");
+            entry_pick = 0;
+            go(ADDRESS);
         } else if (row == HOME_HOST) {
             hosted_mode = 1;
             if (not_ready()) {
@@ -729,9 +754,10 @@ static void page_accept(MenuPage *p, int row)
         }
         break;
     case NAME:
-    case CODE: {
-        const char *letters = screen == NAME ? name_letters : code_letters;
-        int max = screen == NAME ? NAME_MAX : CODE_LENGTH;
+    case CODE:
+    case ADDRESS: {
+        const char *letters = entry_letters();
+        int max = entry_max();
         size_t n = strlen(entry);
         if (row == 0) {
             if ((int)n < max) entry[n] = letters[entry_pick], entry[n + 1] = 0;
@@ -742,6 +768,9 @@ static void page_accept(MenuPage *p, int row)
                 snprintf(name, sizeof name, "%s", entry);
                 save("name", "DHD_NET_NAME", name);
             }
+            go(HOME);
+        } else if (screen == ADDRESS) {
+            save("host_address", "DHD_HOST_ADDRESS", entry);  /* empty: back to the directory */
             go(HOME);
         } else if ((int)n == CODE_LENGTH)
             enter_room(0, entry);
@@ -776,7 +805,8 @@ static void page_back(MenuPage *p)
         menu_page_cancel(p);
         break;
     case NAME:
-    case CODE: {
+    case CODE:
+    case ADDRESS: {
         size_t n = strlen(entry);
         if (n) entry[n - 1] = 0;
         else go(HOME);
@@ -811,8 +841,8 @@ static void page_step(MenuPage *p, int row, int by)
         menu_page_sound(by > 0);
         return;
     }
-    if ((screen == NAME || screen == CODE) && row == 0) {
-        int n = screen == NAME ? (int)sizeof name_letters - 1 : (int)sizeof code_letters - 1;
+    if (is_entry() && row == 0) {
+        int n = (int)strlen(entry_letters());
         entry_pick = (entry_pick + by + n) % n;
         menu_page_sound(by > 0);
     }

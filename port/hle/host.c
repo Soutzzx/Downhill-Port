@@ -954,6 +954,7 @@ static void apply_setting(const char *key, const char *value)
         {"filter", "DHD_FILTER"}, {"vibration", "DHD_VIBRATION"}, {"remap", "DHD_REMAP"}, {"memory_card", "DHD_MEMCARD"},
         {"sound_latency_ms", "DHD_SND_LATENCY_MS"},
         {"server", "DHD_NET_SERVER"}, {"host_directory", "DHD_HOST_DIRECTORY"},
+        {"host_address", "DHD_HOST_ADDRESS"},
         {"name", "DHD_NET_NAME"}, {"rider", "DHD_NET_RIDER"},  /* online (port/online) */
         {"update_url", "DHD_UPDATE_URL"}, {"auto_update", "DHD_AUTO_UPDATE"},  /* the updater (update.c) */
         {"texture_pack", "DHD_TEXTURE_PACK"}, {"textures", "DHD_TEXTURES"},  /* texture packs (port/gs/texpack.c) */
@@ -1118,6 +1119,9 @@ static const char settings_template[] =
     "; Optional: directory that resolves H-prefixed player-hosted room codes.\n"
     "; Use a separate Cloudflare Worker if you cannot deploy on the official server.\n"
     "; host_directory = wss://your-online-directory.workers.dev\n"
+    "; Optional: join an H-code directly at the host's address, with no directory at all.\n"
+    "; The host must accept TCP 8787 (same LAN, a VPN, or a forwarded router port).\n"
+    "; host_address = 192.168.0.10\n"
     "\n"
     "; At start the game looks for a newer release and offers it; online races need the newest.\n"
     "; auto_update = ask (asks first), on (updates without asking) or off (never looks).\n"
