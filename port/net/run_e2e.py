@@ -2,7 +2,7 @@
 scenario (clean, a player dropping at field 300, a player whose state differs from field 400).
 Build first: python port/net/build_tests.py
 usage: python port/net/run_e2e.py [--server URL] [--fields N] [SCENARIO...]
-The server is --server or DHD_NET_SERVER (wrangler dev: ws://127.0.0.1:8787)."""
+The local host is --server ws://127.0.0.1:8787 or DHD_NET_SERVER."""
 import json, os, subprocess, sys, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))

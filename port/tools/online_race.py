@@ -9,9 +9,9 @@ each puppet, hits, finishes and results.
     python port/tools/online_race.py [--seconds 420] [--out DIR] [--capture g+600,g+1200]
                                      [--bots N --replay FILE] [--kill-guest-at SECONDS]
 
-Needs DHD_ISO, DHD_NET_SERVER (the official wss://dhd-online.downhill-revived.workers.dev or
-your own; never write any other deployed address into a tracked file) and the
-build (python port/tools/link.py). At most two dhd.exe of its own run; all are stopped by PID."""
+Needs DHD_ISO and the local build (python port/tools/link.py). The host runs
+inside its game EXE; the guest connects through 127.0.0.1. At most two dhd.exe
+of its own run; all are stopped by PID."""
 import argparse, hashlib, os, re, subprocess, sys, time
 from pathlib import Path
 
@@ -44,7 +44,7 @@ def iso_sha256(iso, cache):
 
 def game_env(iso_hash, pad, extra):
     env = {k: v for k, v in os.environ.items() if not k.startswith('DHD_')}
-    env.update(DHD_ISO=os.environ['DHD_ISO'], DHD_NET_SERVER=os.environ['DHD_NET_SERVER'], DHD_NET_ISO_SHA256=iso_hash,
+    env.update(DHD_ISO=os.environ['DHD_ISO'], DHD_HOST_ADDRESS='127.0.0.1', DHD_NET_ISO_SHA256=iso_hash,
                DHD_SKIP_MOVIES='1', DHD_MEMCARD='0', DHD_SND_OFF='1', DHD_RENDER='native', DHD_RACE_SYNC='1', DHD_NET_SCRIPTED='1',
                DHD_RACE_PAD=pad, DHD_SCREENSHOT='shot', DHD_SCALE='1', DHD_SETTINGS='none')
     env.update(extra)
@@ -83,7 +83,7 @@ def main():
     ap.add_argument('--a', action='append', default=[], help='extra NAME=VALUE for the host game')
     ap.add_argument('--b', action='append', default=[], help='extra NAME=VALUE for the joining game')
     a = ap.parse_args()
-    for v in ('DHD_ISO', 'DHD_NET_SERVER'):
+    for v in ('DHD_ISO',):
         if not os.environ.get(v):
             sys.exit('set ' + v)
     if a.stop_if and os.path.exists(a.stop_if):
@@ -121,7 +121,7 @@ def main():
         for k in range(a.bots):
             d = out / f'bot{k}'
             d.mkdir(exist_ok=True)
-            procs.append(subprocess.Popen([a.nettool, '--bot', '--version', version, '--iso', iso_hash, '--name',
+            procs.append(subprocess.Popen([a.nettool, '--server', 'ws://127.0.0.1:8787', '--bot', '--version', version, '--iso', iso_hash, '--name',
                                            f'Bot{k}', '--replay', a.replay, '--rider', str(k * 2 + 1), 'join', code],
                                           stdout=open(d / 'stdout.log', 'w'), stderr=subprocess.STDOUT))
         go = wait_line([da / 'stderr.log', db / 'stderr.log'], r'countdown starts', 400, procs, a.stop_if)

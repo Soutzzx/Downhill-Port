@@ -5,7 +5,7 @@
    usage: nettool [--server URL] [--name NAME] [--fields N] [--drop-at F] [--corrupt-from F]
                   [--bot --version V --iso SHA256 [--replay FILE --rider N --seconds S]]
                   host [--players N] [--code-file PATH] | join CODE | list
-   The server is --server or DHD_NET_SERVER (ws://127.0.0.1:8787 for wrangler dev).
+   The local host is --server ws://127.0.0.1:8787 (or DHD_NET_SERVER in tests).
    --bot joins a room of real games (finding 041): with the game's version and ISO hash it takes a
    slot and rides it (Cross held, steering in a slow rhythm), sends no state hashes of its own
    and waits as long as a loading game needs. */

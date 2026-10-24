@@ -1,7 +1,6 @@
 /* The release this build is: the one place its version is written (finding 054).
 
-   - The online hello sends it as clientVersion; the server refuses releases older than its
-     MIN_VERSION (online/server/wrangler.jsonc).
+   - The online hello identifies a build so local hosts can reject mismatches.
    - The updater (port/hle/update.c) compares it with the newest release's latest.json.
    - port/tools/package_release.py names the zip after it and writes latest.json for it.
 

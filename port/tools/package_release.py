@@ -21,9 +21,8 @@ The zip is refused if dhd.exe:
   - holds an absolute path (a builder's folder, C:\\Users\\..., the repository's own path), in
     ASCII or UTF-16 (a drive path "X:\\..." in ASCII: in the data sections, where strings are; in
     machine code such bytes are an instruction's operand);
-  - holds a server address other than the official one (dhd-online.downhill-revived.workers.dev,
-    the built-in default): another workers.dev host, DHD_NET_SERVER when set, or the server line of a
-    dhd.ini named by --settings;
+  - holds any workers.dev server address, or a server address named by
+    DHD_NET_SERVER or --settings;
 or if a packaged file name looks like game data, or any packaged file holds a run of 64 bytes or
 more of the retail ELF (port/tools/scan_retail.py) other than the string literals and tables the
 decompiled source itself holds (scan_retail.SOURCE). The game's data comes from the player's disc
@@ -58,9 +57,7 @@ def header_version():
 GAME_DATA = re.compile(r'\.(iso|bin|img|elf|irx|mc2|ps2|raw|vpk|vag|pss)$|^SCUS_|bios', re.I)
 # an absolute Windows path: a drive letter, a separator, then at least two printable characters
 ABSOLUTE = re.compile(rb'(?<![A-Za-z0-9])[A-Za-z]:[\\/][\x20-\x7e]{2,}')
-# The official public race server (port/hle/host.c): the one server address a release may name.
-OFFICIAL_HOST = b'dhd-online.downhill-revived.workers.dev'
-# any workers.dev host (other_hosts allows only the official one)
+# A release must not contain an external multiplayer endpoint.
 WORKERS_HOST = re.compile(rb'[A-Za-z0-9.-]*workers\.dev', re.I)
 # user folders, and the builder's own account name and checkout folders
 FORBIDDEN = [b'\\Users\\', b'/Users/'] + [
@@ -84,8 +81,6 @@ def server_strings(settings):
     out = set()
     for s in filter(None, found):
         host = re.sub(r'^\w+://', '', s).split('/')[0]
-        if host.encode().lower() == OFFICIAL_HOST:
-            continue  # the official server may be named
         out.add(s.encode())
         if host:
             out.add(host.encode())  # the host name alone, too
@@ -93,8 +88,8 @@ def server_strings(settings):
 
 
 def other_hosts(text):
-    """workers.dev hosts in text other than the official server."""
-    return sorted({m.group(0).lower() for m in WORKERS_HOST.finditer(text)} - {OFFICIAL_HOST})
+    """Any workers.dev host embedded in a release file."""
+    return sorted({m.group(0).lower() for m in WORKERS_HOST.finditer(text)})
 
 
 def without_code(data):
@@ -186,9 +181,7 @@ def main():
         if runs:
             sys.exit('%s holds game data (runs of the retail ELF):\n  %s' % (file_name, '\n  '.join(
                 '+0x%X: %d bytes = %s' % (at, n, scan_retail.elf_place(elf, e)) for at, e, n in runs[:20])))
-        # the text files may show the official server and example.org addresses, nothing else
-        hosts = set(h.lower().rstrip(b'.') for h in re.findall(rb'wss?://([A-Za-z0-9.:-]+)', data)) - {
-            b'races.example.org', OFFICIAL_HOST}
+        hosts = set(h.lower().rstrip(b'.') for h in re.findall(rb'wss?://([A-Za-z0-9.:-]+)', data))
         if file_name != 'dhd.exe' and (hosts or other_hosts(data) or any(s.lower() in data.lower() for s in FORBIDDEN + sorted(servers))):
             sys.exit('%s names a server or a local path; not packaged' % file_name)
     out.parent.mkdir(parents=True, exist_ok=True)

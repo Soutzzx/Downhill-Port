@@ -4,7 +4,7 @@
    DHD_RACE_PAD<n>) or the host's controller i; DHD_PADS (1-4) plugs that many in, 3-4 through
    a multitap on port 0 (finding 040).
 
-   Online (DHD_NET_CREATE=1 or DHD_NET_JOIN=code, with DHD_NET_SERVER) every PC runs a normal
+   Online (DHD_NET_CREATE=1 or DHD_NET_JOIN=code, with optional DHD_HOST_ADDRESS) every PC runs a normal
    one-player race and the riders' states travel (state sync, finding 044, port/hle/puppet.c):
    - Boot: the PC waits in the lobby (the barrier) until the host starts. Then the built-in menu
      script goes to a single race; on the load screen (menu 9) the lobby's track and this
@@ -25,6 +25,7 @@
 #include "hle.h"
 #include "../gs/present.h"
 #include "../net/net.h"
+#include "../net/native_host.h"
 #include "../net/player_host.h"
 #include "../include/version.h"
 
@@ -392,14 +393,22 @@ static void save_env(const char *name, char *out, size_t size)
 static void connect_lobby(void)
 {
     char version[64];
-    const char *server = getenv("DHD_NET_SERVER"), *name = getenv("DHD_NET_NAME");
+    const char *name = getenv("DHD_NET_NAME");
     const char *iso = getenv("DHD_NET_ISO_SHA256"), *join = getenv("DHD_NET_JOIN");
-    if (!server || !*server) fail("no server address (DHD_NET_SERVER: the launcher's server field or dhd.ini).");
+    char direct[192];
+    if (join && *join) {
+        if (!net_find_player_host(join, direct, sizeof direct))
+            fail("set DHD_HOST_ADDRESS to the host's LAN/Radmin IP and check the room code.");
+    } else {
+        native_host_set_public(0);
+        if (!native_host_start()) fail(native_host_error());
+        snprintf(direct, sizeof direct, "ws://127.0.0.1:8787");
+    }
     const char *render = getenv("DHD_RENDER");
     if (!render || strcmp(render, "native")) fail("online races use the native renderer (DHD_RENDER=native).");
     if (!iso || strlen(iso) != 64) fail("the ISO's SHA-256 is missing (start the game from the launcher).");
     build_version(version, sizeof version);
-    net_init(server, name && *name ? name : "Rider", version, iso);
+    net_init(direct, name && *name ? name : "Rider", version, iso);
     if (join && *join) {
         if (net_join_room(join) < 0) fail("that join code can't be one (6 letters and digits).");
     } else
