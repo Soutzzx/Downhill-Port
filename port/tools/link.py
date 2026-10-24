@@ -275,7 +275,20 @@ def main():
         sys.exit('PS2 data image: %s' % e)
     # the icon (port/res/dhd.rc), shown by Explorer, the taskbar and the game's windows
     res = os.path.join(OUT, 'dhd.res')
-    p = run(['llvm-rc', '/fo', res, os.path.join(ROOT, 'port', 'res', 'dhd.rc')])
+    # The same version.h drives the runtime protocol and the Windows PE
+    # FileVersion/ProductVersion metadata. Check they stay in sync before
+    # creating an executable we would distribute to other players.
+    version_header = open(os.path.join(ROOT, 'port', 'include', 'version.h'),
+                          encoding='utf-8').read()
+    version_text = re.search(r'#define DHD_VERSION "([0-9]+)\.([0-9]+)\.([0-9]+)"', version_header)
+    numeric = [re.search(r'#define DHD_VERSION_' + name + r' ([0-9]+)', version_header)
+               for name in ('MAJOR', 'MINOR', 'PATCH')]
+    if not version_text or not all(numeric) or (
+            tuple(int(v) for v in version_text.groups()) !=
+            tuple(int(m.group(1)) for m in numeric)):
+        sys.exit('version.h: DHD_VERSION and DHD_VERSION_MAJOR/MINOR/PATCH disagree')
+    p = run(['llvm-rc', '/I', os.path.join(ROOT, 'port', 'include'),
+             '/fo', res, os.path.join(ROOT, 'port', 'res', 'dhd.rc')])
     if p.returncode:
         sys.exit(p.stderr)
     dobjs = [symbols_obj, assemble(fixups_s), res]

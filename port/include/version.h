@@ -9,6 +9,11 @@
 #ifndef DHD_VERSION_H
 #define DHD_VERSION_H
 
+/* Keep these numeric parts in step with DHD_VERSION; the compiler and
+   Windows resource version are validated together by the build. */
+#define DHD_VERSION_MAJOR 0
+#define DHD_VERSION_MINOR 2
+#define DHD_VERSION_PATCH 8
 #define DHD_VERSION "0.2.8"
 
 #endif
