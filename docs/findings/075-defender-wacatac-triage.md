@@ -41,5 +41,21 @@ environment to find the first detected artifact; inspect that delta; submit
 the exact detected EXE as a software developer to Microsoft for a verdict.
 Do not distribute the detected build or add antivirus exclusions.
 
+2026-10-24 follow-up: the user's multi-vendor screenshot labels a file
+`trojan.barys/suspected`, with several `Gen:Variant.Barys.505730` detections and
+other generic/downloader labels. The user supplied SHA-256
+`b01b62a3ac4cef26a1a10b1ca46927f3b19d546160644fb9a37b29761530b0ca`.
+That exactly matches the local clean-build manifest and bytes for commit
+`99ba7f63` (built 2026-10-24 16:18:01); PE signature status is `NotSigned`.
+A copy of this exact EXE in `build/port/triage/` passed a local Microsoft Defender
+custom-file scan with no threats, and both copy and original remained present.
+This does not overturn the other vendors' results and does not certify the EXE
+safe. It does show that the earlier Wacatac detection and the user's Barys
+screenshot are different scan outcomes. The 99ba7f63 player build no longer
+contains the official Cloudflare endpoint, so removing Cloudflare did not
+eliminate the multi-vendor flags. The updater and suspended self-relaunch are
+still in this build; they also existed in the earlier clean a1a6bcbf build,
+so attributing the Barys flags to either behavior would be inference only.
+
 Sources: Microsoft [software developer FAQ](https://learn.microsoft.com/en-us/defender-xdr/developer-faq)
 and [sample submission guide](https://learn.microsoft.com/en-us/defender-xdr/submission-guide).

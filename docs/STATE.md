@@ -1,5 +1,13 @@
 # State
 
+2026-10-26 Radmin lobby follow-up (finding 077): LAN public discovery now reads the
+whole space-containing build identity, so compatible rooms can be selected. The
+room allows two players to Ready with the same rider. A centered wait message is
+shown after the local flyby ends while peers finish the flyby or load. The online
+shell now lets retail menu 16 run after rider selection, so its shop transition is
+not mistaken for the initial career-menu bypass. Source review and diff check only;
+build and live Radmin validation remain open.
+
 2026-10-24 local multiplayer change (finding 076): player-facing ONLINE now
 uses the embedded host for private H-code rooms and public LAN/Radmin rooms.
 Public discovery uses UDP 8788 and direct TCP 8787; VPN users can enter the
@@ -17,6 +25,12 @@ An earlier clean `a1a6bcbf` EXE scans clear on the same installation and already
 includes native hosting and direct VPN/IP joining. Cause and Microsoft verdict
 remain open; preserve the direct-host multiplayer path and do not distribute
 the detected build.
+
+2026-10-24 Barys follow-up (finding 075): user's screenshot SHA-256 matches
+local 99ba7f63 clean EXE exactly. Several vendors flag Barys/generic/downloader;
+a Defender scan of a copy of those exact bytes found no threats. The build is
+unsigned, and the multi-vendor verdict remains unresolved. Cloudflare removal
+did not remove the flags; do not infer a cause from the detection names alone.
 
 Goal: readable, **matching** C/C++ decompilation of Downhill Domination (PS2, USA `SCUS_971.77`):
 source that rebuilds the retail executable byte for byte. Later it can serve as the base for a PC

@@ -194,12 +194,14 @@ int net_list_lobbies(NetLobbyInfo *out, int max)
         struct timeval wait={0,100000};
         if(select(0,&read_set,NULL,NULL,&wait)<=0)continue;
         struct sockaddr_in sender;int sender_len=sizeof sender;
-        char reply[180],code[8],build[64];int players,limit,track;
+        char reply[180],code[8],build[64];int players,limit,track,offset=0;
         int n=recvfrom(fd,reply,sizeof reply-1,0,(struct sockaddr*)&sender,&sender_len);
         if(n<=0)continue;
         reply[n]=0;
-        if(sscanf(reply,"DHD-LAN-1 %7s %d %d %d %63s",code,&players,&limit,&track,build)!=5||
+        if(sscanf(reply,"DHD-LAN-1 %7s %d %d %d %n",code,&players,&limit,&track,&offset)!=4||
+           !offset||!reply[offset]||strlen(reply+offset)>=sizeof build||
            strlen(code)!=6||code[0]!='H'||players<1||limit<2||players>limit||limit>8)continue;
+        snprintf(build,sizeof build,"%s",reply+offset);
         char ip[INET_ADDRSTRLEN];
         if(!InetNtopA(AF_INET,&sender.sin_addr,ip,sizeof ip))continue;
         int duplicate=0;

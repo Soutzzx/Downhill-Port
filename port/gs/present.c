@@ -24,6 +24,8 @@ static unsigned buffer_width, buffer_height;
 static uint32_t pixels[1024 * 1024];
 static int initialized, disabled, resize_pending;
 static volatile LONG window_closed;
+static HWND cutscene_wait;
+static HBRUSH cutscene_brush;
 /* Presentation for low latency and variable refresh (round 38, finding 052): a flip-model chain
    that may tear (G-SYNC/FreeSync show each picture when presented; the port's own limiter paces
    them, kernel.c) and holds at most one frame (the frame-latency waitable object, else the
@@ -34,13 +36,34 @@ static volatile LONG latency_armed;
 
 static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
+    if (msg == WM_APP + 1) {
+        if (wp && !cutscene_wait) {
+            cutscene_wait = CreateWindowA("STATIC", "Waiting for other players to skip the cutscene or finish loading",
+                                           WS_CHILD | SS_CENTER | SS_CENTERIMAGE, 0, 0, 100, 50,
+                                           hwnd, NULL, GetModuleHandleA(NULL), NULL);
+        }
+        if (cutscene_wait) {
+            RECT area;
+            GetClientRect(hwnd, &area);
+            int width = area.right - area.left, height = area.bottom - area.top;
+            SetWindowPos(cutscene_wait, HWND_TOP, width / 2 - 260, height / 2 - 30,
+                         520, 60, wp ? SWP_SHOWWINDOW : SWP_HIDEWINDOW);
+        }
+        return 0;
+    }
+    if (msg == WM_CTLCOLORSTATIC && (HWND)lp == cutscene_wait) {
+        SetTextColor((HDC)wp, RGB(255, 255, 255));
+        SetBkColor((HDC)wp, RGB(0, 0, 0));
+        if (!cutscene_brush) cutscene_brush = CreateSolidBrush(RGB(0, 0, 0));
+        return (LRESULT)cutscene_brush;
+    }
     /* Flip chains need ResizeBuffers after window/fullscreen transitions,
        even when the game's scanout dimensions have not changed. */
     if (msg == WM_CHAR && text_input_active()) { text_input_character((unsigned)wp); return 0; }
     if (msg == WM_KILLFOCUS) text_input_clear();
-    if (msg == WM_SIZE) resize_pending = 1;
+    if (msg == WM_SIZE) { resize_pending = 1; if (cutscene_wait && IsWindowVisible(cutscene_wait)) PostMessageA(hwnd, WM_APP + 1, 1, 0); }
     if (msg == WM_CLOSE) { DestroyWindow(hwnd); return 0; }
-    if (msg == WM_DESTROY) { PostQuitMessage(0); return 0; }
+    if (msg == WM_DESTROY) { if (cutscene_brush) DeleteObject(cutscene_brush); PostQuitMessage(0); return 0; }
     return DefWindowProcA(hwnd, msg, wp, lp);
 }
 
@@ -416,6 +439,11 @@ void gs_window_title(const char *utf8)
     wchar_t title[256];
     if (!window || !MultiByteToWideChar(CP_UTF8, 0, utf8, -1, title, 256)) return;
     SetWindowTextW(window, title);
+}
+
+void gs_window_cutscene_wait(int waiting)
+{
+    if (window) PostMessageA(window, WM_APP + 1, waiting != 0, 0);
 }
 
 /* EXIT GAME (port/hle/exit_menu.c): the window closes as when its close button is clicked, and

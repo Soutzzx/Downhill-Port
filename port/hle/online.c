@@ -727,6 +727,7 @@ static void start_together(void)
     static const uint8_t loaded[2] = {EVENT_VERSION, EVENT_LOADED};
     double entered = host_wall_seconds();
     int host = on.local_slot == on.host_slot, announced = 0;
+    int showing_wait = 0;
     send_event(loaded, sizeof loaded);
     for (;;) {
         NetLobby lobby;
@@ -735,6 +736,10 @@ static void start_together(void)
         int missing = 0;
         for (int i = 0; i < lobby.nslots; i++)
             if (i != on.local_slot && !lobby.racer[i].left && !on.loaded[i]) missing++;
+        if (!!missing != showing_wait) {
+            showing_wait = !!missing;
+            gs_window_cutscene_wait(showing_wait);
+        }
         double waited = host_wall_seconds() - entered;
         if (!net_racing() || waited > 75) break;
         if (host && !announced && (!missing || waited > 60)) {
@@ -751,6 +756,7 @@ static void start_together(void)
         gs_pump_messages();
         Sleep(on.go_at && on.go_at - net_server_ms() < 20 ? 0 : 2);
     }
+    gs_window_cutscene_wait(0);
     kernel_pace_shared(1);  /* from the agreed moment the fields keep to it, catching up after a stall */
     hle_puppet_rematch();  /* snapshots from before this start (of the race before, after a rematch) */
     fprintf(stderr, "online: countdown starts (waited %.3f s, %+.1f ms from the agreed moment)\n",

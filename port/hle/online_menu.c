@@ -521,13 +521,12 @@ static void room_update(MenuPage *p, NetLobby *l)
         menu_page_close(p);
         return;
     }
-    int own_ready = 0, conflict = 0;
+    int own_ready = 0;
     for (int i = 0; i < l->nmembers; i++) {
         if (l->member[i].id == l->member_id) own_ready = l->member[i].ready;
-        else if (selected && l->member[i].rider == chosen_rider / 32) conflict = 1;
     }
     if (in) room_options = l->laps;
-    if (own_ready && (conflict || ready_track != l->track || ready_options != l->laps)) net_set_ready(0);
+    if (own_ready && (ready_track != l->track || ready_options != l->laps)) net_set_ready(0);
     int ready = 0;
     for (int i = 0; i < l->nmembers; i++) ready += l->member[i].ready;
     int can_start = in && l->is_host && l->nmembers >= 2 && ready == l->nmembers;
@@ -567,17 +566,16 @@ static void room_update(MenuPage *p, NetLobby *l)
     menu_page_enable(p, R_TRACK, in && l->is_host);
     menu_page_enable(p, R_BOTS, in && l->is_host);
     menu_page_enable(p, R_SELECT, in);
-    menu_page_enable(p, room_ready_row(), in && selected && !conflict);
+    menu_page_enable(p, room_ready_row(), in && selected);
     menu_page_enable(p, room_start_row(), can_start);
     menu_page_enable(p, room_leave_row(), 1);
     if (room_focus) {
-        menu_page_set_cursor(p, conflict ? R_SELECT : room_ready_row());
+        menu_page_set_cursor(p, room_ready_row());
         room_focus = 0;
     }
     /* what to do next, else what everyone waits for */
     if (status[0]) p->footer = status;
     else if (!in) p->footer = "No connection: Leave Room to give up";
-    else if (conflict) p->footer = "Rider taken: change your selection";
     else if (!selected) p->footer = "Choose your rider, bike and outfit first";
     else if (l->nmembers < 2) {
         if (hosted_mode)
@@ -908,8 +906,9 @@ int port_online_shell(void)
 {
     if (!choosing) return 0;
     int menu = SHELL_WORD(0x29DED8);
-    if (menu == 16) {
-        /* Single races only: bypass the career's NEW / CONTINUE and mode menus. */
+    if (menu == 16 && !visited_rider_screen) {
+        /* Before the picker, bypass the career menus. Retail also uses menu 16
+           after a rider is chosen; that later visit must reach the shop. */
         SHELL_WORD(0x29DED8) = 11;
         SHELL_WORD(0x29DEEC) = 1;
         SETUP_WORD(0x10C) = 12;
