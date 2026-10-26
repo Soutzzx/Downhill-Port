@@ -15,11 +15,14 @@ hides it when they arrive or the wait ends. The message also mentions loading be
 the existing event does not distinguish a peer watching the flyby from a slow loader.
 
 The player clarified that after rider selection the shop briefly goes black and returns
-to the lobby without input. The online shell bypassed every visit to retail menu 16 as
-an initial career-menu detour. Retail also visits menu 16 after the rider screen, before
-the shop exit. Restrict that bypass to before the rider screen has been reached. This
-allows the later retail transition to continue. Finding 065 records a two-instance test
-where outfit and bike previews changed; the new guard still needs a live two-PC retest.
+to the lobby without input. An initial attempt to treat retail menu 16 differently
+exposed the NEW / CONTINUE career screen and did not repair the shop. The real cause
+is the early interception of menu 18: `func_001F1500` calls `func_00139BF8(0)` there,
+which opens the modal bike/outfit shop. The online hook returned before that call.
+Menu 16 is again bypassed. Menu 18 now runs retail code, and a build-time patch after
+`func_00139BF8` returns records the choice and returns to the lobby. Cancelling the
+shop continues through retail's back path. Finding 065 records a two-instance test
+where outfit and bike previews changed; this correction still needs a live two-PC retest.
 
 Sources consulted: the local original shell and online hooks described in finding 065,
 the LAN host/client protocol in `port/net/`, and the [PCSX2 source repository](https://github.com/PCSX2/pcsx2)

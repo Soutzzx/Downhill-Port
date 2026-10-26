@@ -615,6 +615,13 @@ PATCHES['unsorted/001EB1D8.cpp'] += [
 ]
 
 # The stock level chooser accepts the host's track only; guests retain the same shop exit.
+PATCHES['unsorted/001EB1D8.cpp'] += [
+    ('text', 'void func_001F1500__c14(void)\n{',
+     'extern int port_online_shop_finished(void);\nvoid func_001F1500__c14(void)\n{'),
+    ('text', '        func_00139BF8__c14(0);',
+     '        func_00139BF8__c14(0);\n        if (port_online_shop_finished()) return;'),
+]
+
 PATCHES['unsorted/001F8920.c'] = PATCHES.get('unsorted/001F8920.c', []) + [
     ('text', 'void func_001F8920(struct Race *race)\n{',
      'extern int port_online_guest_track(void);\n'

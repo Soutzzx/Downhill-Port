@@ -102,7 +102,6 @@ void func_0023D898(int view, float *distance, float *aspect);
 void func_0023D8D8(int view, float distance, float aspect);
 float func_00203C28(void *animation);
 void func_001F79D8(int level, int frames);  /* the shell's screen fade */
-extern int D_00275CB0[];  /* each rider's camera take out of the shop (func_001F1500) */
 int func_00220230(int port);  /* the buttons held on a pad */
 static float shell_distance, shell_aspect;
 static int offline_mode, offline_submode, offline_players;
@@ -906,9 +905,8 @@ int port_online_shell(void)
 {
     if (!choosing) return 0;
     int menu = SHELL_WORD(0x29DED8);
-    if (menu == 16 && !visited_rider_screen) {
-        /* Before the picker, bypass the career menus. Retail also uses menu 16
-           after a rider is chosen; that later visit must reach the shop. */
+    if (menu == 16) {
+        /* Single races bypass the career's NEW / CONTINUE menu. */
         SHELL_WORD(0x29DED8) = 11;
         SHELL_WORD(0x29DEEC) = 1;
         SETUP_WORD(0x10C) = 12;
@@ -918,20 +916,8 @@ int port_online_shell(void)
     NetLobby connection;
     net_get_lobby(&connection);
     int lost = connection.state == NET_FAILED || connection.state == NET_IDLE;
-    if (menu == 18) {
-        /* The shop's START: when its camera has flown out, retail goes on to the level chooser,
-           which sets up the race's loading (func_00139BF8) and takes the camera. The choice is
-           complete here: keep it and leave as the rider screen's Back does; the room (with the
-           host's track) opens over the rider screen. */
-        void *animation = (void *)(uintptr_t)(0x08000000u + 0x4C6370);
-        int rider_index = SHELL_WORD(0x4C6910 + 4 * SHELL_WORD(0x29DF68));
-        func_00203590(animation, 0x2330, 0, D_00275CB0[rider_index]);
-        if (func_00203C28(animation) < 1.0f) return 0;
-        if (!lost) keep_selection();
-        selection_end();
-        func_001F79D8(0, 0x3C);  /* the shop's exit faded to black; the level chooser fades back */
-        return 1;  /* the main menu next frame: the flight to the rider screen below */
-    }
+    /* Retail menu 18 opens the bike/outfit shop modally. Let it run; the hook
+       immediately after func_00139BF8 returns the completed choice to the room. */
     /* Reaching the retail rider screen is required before treating the
        transitional 15/0 menu as 'Back'. Without this guard, clicking Choose
        immediately reopens RACE ROOM and skips the rider/bike/outfit shop. */
@@ -1007,3 +993,14 @@ int port_online_guest_track(void)
 }
 
 int port_online_single_race(void) { return choosing; }
+
+/* Called after retail's modal bike/outfit shop closes, before the shell starts
+   loading a race. A cancelled shop follows retail's own back path. */
+int port_online_shop_finished(void)
+{
+    if (!choosing || SHELL_WORD(0x3F53FC)) return 0;
+    keep_selection();
+    selection_end();
+    func_001F79D8(0, 0x3C);
+    return 1;
+}

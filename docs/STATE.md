@@ -4,8 +4,9 @@
 whole space-containing build identity, so compatible rooms can be selected. The
 room allows two players to Ready with the same rider. A centered wait message is
 shown after the local flyby ends while peers finish the flyby or load. The online
-shell now lets retail menu 16 run after rider selection, so its shop transition is
-not mistaken for the initial career-menu bypass. Source review and diff check only;
+shell again skips career menu 16. The shop is opened inside retail menu 18; the
+online return hook now runs after the modal shop closes rather than before it opens.
+Source review and diff check only;
 build and live Radmin validation remain open.
 
 2026-10-24 local multiplayer change (finding 076): player-facing ONLINE now
