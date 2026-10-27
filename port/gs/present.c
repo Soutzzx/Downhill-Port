@@ -25,7 +25,6 @@ static uint32_t pixels[1024 * 1024];
 static int initialized, disabled, resize_pending;
 static volatile LONG window_closed;
 static HWND cutscene_wait;
-static HBRUSH cutscene_brush;
 /* Presentation for low latency and variable refresh (round 38, finding 052): a flip-model chain
    that may tear (G-SYNC/FreeSync show each picture when presented; the port's own limiter paces
    them, kernel.c) and holds at most one frame (the frame-latency waitable object, else the
@@ -34,28 +33,42 @@ static UINT swap_flags;
 static HANDLE latency_waitable;
 static volatile LONG latency_armed;
 
+static LRESULT CALLBACK cutscene_wait_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT paint;
+        HDC dc = BeginPaint(hwnd, &paint);
+        RECT area;
+        GetClientRect(hwnd, &area);
+        FillRect(dc, &area, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+        DrawTextA(dc, "Waiting for other players to finish the cutscene or load",
+                  -1, &area, DT_CENTER | DT_VCENTER | DT_WORDBREAK);
+        EndPaint(hwnd, &paint);
+        return 0;
+    }
+    return DefWindowProcA(hwnd, msg, wp, lp);
+}
+
 static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     if (msg == WM_APP + 1) {
         if (wp && !cutscene_wait) {
-            cutscene_wait = CreateWindowA("STATIC", "Waiting for other players to skip the cutscene or finish loading",
-                                           WS_CHILD | SS_CENTER | SS_CENTERIMAGE, 0, 0, 100, 50,
+            cutscene_wait = CreateWindowExA(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                           "DHDCutsceneWait", "", WS_POPUP, 0, 0, 520, 60,
                                            hwnd, NULL, GetModuleHandleA(NULL), NULL);
         }
         if (cutscene_wait) {
             RECT area;
             GetClientRect(hwnd, &area);
             int width = area.right - area.left, height = area.bottom - area.top;
-            SetWindowPos(cutscene_wait, HWND_TOP, width / 2 - 260, height / 2 - 30,
-                         520, 60, wp ? SWP_SHOWWINDOW : SWP_HIDEWINDOW);
+            POINT center = {width / 2, height / 2};
+            ClientToScreen(hwnd, &center);
+            SetWindowPos(cutscene_wait, HWND_TOPMOST, center.x - 260, center.y - 30,
+                         520, 60, SWP_NOACTIVATE | (wp ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
         }
         return 0;
-    }
-    if (msg == WM_CTLCOLORSTATIC && (HWND)lp == cutscene_wait) {
-        SetTextColor((HDC)wp, RGB(255, 255, 255));
-        SetBkColor((HDC)wp, RGB(0, 0, 0));
-        if (!cutscene_brush) cutscene_brush = CreateSolidBrush(RGB(0, 0, 0));
-        return (LRESULT)cutscene_brush;
     }
     /* Flip chains need ResizeBuffers after window/fullscreen transitions,
        even when the game's scanout dimensions have not changed. */
@@ -63,7 +76,7 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     if (msg == WM_KILLFOCUS) text_input_clear();
     if (msg == WM_SIZE) { resize_pending = 1; if (cutscene_wait && IsWindowVisible(cutscene_wait)) PostMessageA(hwnd, WM_APP + 1, 1, 0); }
     if (msg == WM_CLOSE) { DestroyWindow(hwnd); return 0; }
-    if (msg == WM_DESTROY) { if (cutscene_brush) DeleteObject(cutscene_brush); PostQuitMessage(0); return 0; }
+    if (msg == WM_DESTROY) { PostQuitMessage(0); return 0; }
     return DefWindowProcA(hwnd, msg, wp, lp);
 }
 
@@ -78,6 +91,11 @@ static DWORD WINAPI window_thread(void *arg)
 {
     WindowSpec *s = arg;
     MSG msg;
+    WNDCLASSA overlay = {0};
+    overlay.lpfnWndProc = cutscene_wait_proc;
+    overlay.hInstance = GetModuleHandleA(NULL);
+    overlay.lpszClassName = "DHDCutsceneWait";
+    RegisterClassA(&overlay);
     window = CreateWindowA(s->class_name, "Downhill Revived", s->style, s->x, s->y, s->w, s->h, NULL, NULL,
                            GetModuleHandleA(NULL), NULL);
     SetEvent(s->ready);  /* s is gone after this */

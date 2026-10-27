@@ -9,6 +9,13 @@ online return hook now runs after the modal shop closes rather than before it op
 Source review and diff check only;
 build and live Radmin validation remain open.
 
+2026-10-26 follow-up (finding 077): player confirmed rider duplicates, public-room
+selection and bike/outfit customization. The level popup after customization could
+still start a solo race; the port now closes that modal at its level-screen update
+and returns to RACE ROOM. The cutscene wait message is now a separate owned window
+because the child overlay was not visible in the player's test. Both changes need
+a new multiplayer build and live check.
+
 2026-10-24 local multiplayer change (finding 076): player-facing ONLINE now
 uses the embedded host for private H-code rooms and public LAN/Radmin rooms.
 Public discovery uses UDP 8788 and direct TCP 8787; VPN users can enter the

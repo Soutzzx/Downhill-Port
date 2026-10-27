@@ -994,8 +994,17 @@ int port_online_guest_track(void)
 
 int port_online_single_race(void) { return choosing; }
 
-/* Called after retail's modal bike/outfit shop closes, before the shell starts
-   loading a race. A cancelled shop follows retail's own back path. */
+/* The retail shop's next popup is SELECT LEVEL. Its update runs before that
+   popup reads a level choice; close the modal here so only RACE ROOM starts a race. */
+int port_online_level_reached(void)
+{
+    if (!choosing) return 0;
+    *(uint8_t *)(uintptr_t)(0x08000000u + 0x3F53FD) = 1;
+    return 1;
+}
+
+/* Called after the retail modal closes, before the shell starts loading a race.
+   A cancelled shop follows retail's own back path. */
 int port_online_shop_finished(void)
 {
     if (!choosing || SHELL_WORD(0x3F53FC)) return 0;

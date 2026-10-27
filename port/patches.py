@@ -625,7 +625,10 @@ PATCHES['unsorted/001EB1D8.cpp'] += [
 PATCHES['unsorted/001F8920.c'] = PATCHES.get('unsorted/001F8920.c', []) + [
     ('text', 'void func_001F8920(struct Race *race)\n{',
      'extern int port_online_guest_track(void);\n'
+     'extern int port_online_level_reached(void);\n'
      'extern void func_001F8A08(void *);\nvoid func_001F8920(struct Race *race)\n{'),
+    ('text', '    race->x4A8 = 5;',
+     '    if (port_online_level_reached()) return;\n    race->x4A8 = 5;'),
     ('text', '        func_0018E1C0(race);',
      '        func_0018E1C0(race);\n'
      '        if (port_online_guest_track()) func_001F8A08(race);'),
