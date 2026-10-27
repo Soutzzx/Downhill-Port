@@ -2,6 +2,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <iphlpapi.h>
 #include "net.h"
 
 #include <ctype.h>
@@ -185,6 +186,40 @@ int net_list_lobbies(NetLobbyInfo *out, int max)
     target.sin_port=htons(8788);
     target.sin_addr.s_addr=htonl(INADDR_BROADCAST);
     sendto(fd,"DHD-LAN-1",9,0,(struct sockaddr*)&target,sizeof target);
+    /* Limited broadcast may use only the default adapter. Probe every active
+       IPv4 subnet too, so VPN adapters such as Radmin receive discovery. */
+    HMODULE iphelper=LoadLibraryA("iphlpapi.dll");
+    if(iphelper){
+        typedef ULONG (WINAPI *GetAdaptersAddressesFn)(ULONG,ULONG,PVOID,PIP_ADAPTER_ADDRESSES,PULONG);
+        GetAdaptersAddressesFn addresses=(GetAdaptersAddressesFn)GetProcAddress(iphelper,"GetAdaptersAddresses");
+        if(addresses){
+            ULONG bytes=16384;
+            IP_ADAPTER_ADDRESSES *adapters=malloc(bytes);
+            if(adapters){
+                ULONG result=addresses(AF_INET,GAA_FLAG_SKIP_ANYCAST|GAA_FLAG_SKIP_MULTICAST|GAA_FLAG_SKIP_DNS_SERVER,
+                                       NULL,adapters,&bytes);
+                if(result==ERROR_BUFFER_OVERFLOW&&bytes<=131072){
+                    free(adapters);adapters=malloc(bytes);
+                    if(adapters)result=addresses(AF_INET,GAA_FLAG_SKIP_ANYCAST|GAA_FLAG_SKIP_MULTICAST|
+                                                  GAA_FLAG_SKIP_DNS_SERVER,NULL,adapters,&bytes);
+                }
+                if(adapters&&result==NO_ERROR)
+                    for(IP_ADAPTER_ADDRESSES *a=adapters;a;a=a->Next){
+                        if(a->OperStatus!=IfOperStatusUp)continue;
+                        for(IP_ADAPTER_UNICAST_ADDRESS *u=a->FirstUnicastAddress;u;u=u->Next){
+                            if(!u->Address.lpSockaddr||u->Address.lpSockaddr->sa_family!=AF_INET||
+                               u->OnLinkPrefixLength<1||u->OnLinkPrefixLength>30)continue;
+                            struct sockaddr_in *local=(struct sockaddr_in*)u->Address.lpSockaddr;
+                            uint32_t mask=0xffffffffu<<(32-u->OnLinkPrefixLength);
+                            target.sin_addr.s_addr=htonl(ntohl(local->sin_addr.s_addr)|~mask);
+                            sendto(fd,"DHD-LAN-1",9,0,(struct sockaddr*)&target,sizeof target);
+                        }
+                    }
+                free(adapters);
+            }
+        }
+        FreeLibrary(iphelper);
+    }
     const char *direct=getenv("DHD_HOST_ADDRESS");
     if(direct&&InetPtonA(AF_INET,direct,&target.sin_addr)==1)
         sendto(fd,"DHD-LAN-1",9,0,(struct sockaddr*)&target,sizeof target);
@@ -194,14 +229,20 @@ int net_list_lobbies(NetLobbyInfo *out, int max)
         struct timeval wait={0,100000};
         if(select(0,&read_set,NULL,NULL,&wait)<=0)continue;
         struct sockaddr_in sender;int sender_len=sizeof sender;
-        char reply[180],code[8],build[64];int players,limit,track,offset=0;
+        char reply[180],code[8],build[64];int players,limit,track;
         int n=recvfrom(fd,reply,sizeof reply-1,0,(struct sockaddr*)&sender,&sender_len);
         if(n<=0)continue;
         reply[n]=0;
-        if(sscanf(reply,"DHD-LAN-1 %7s %d %d %d %n",code,&players,&limit,&track,&offset)!=4||
-           !offset||!reply[offset]||strlen(reply+offset)>=sizeof build||
+        if(sscanf(reply,"DHD-LAN-1 %7s %d %d %d",code,&players,&limit,&track)!=4||
            strlen(code)!=6||code[0]!='H'||players<1||limit<2||players>limit||limit>8)continue;
-        snprintf(build,sizeof build,"%s",reply+offset);
+        const char *version=reply+9;
+        for(int part=0;part<4;part++){
+            while(*version&&isspace((unsigned char)*version))version++;
+            while(*version&&!isspace((unsigned char)*version))version++;
+        }
+        while(*version&&isspace((unsigned char)*version))version++;
+        if(!*version||strlen(version)>=sizeof build)continue;
+        snprintf(build,sizeof build,"%s",version);
         char ip[INET_ADDRSTRLEN];
         if(!InetNtopA(AF_INET,&sender.sin_addr,ip,sizeof ip))continue;
         int duplicate=0;

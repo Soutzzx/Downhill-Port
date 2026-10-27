@@ -47,6 +47,17 @@ The wait window now centers a larger outlined, italic font over a transparent
 background. It approximates the retail font because the game renderer is blocked
 during this wait; the separate Win32 window cannot use its GS text packets.
 
+The next player test showed the final italic `S` clipped and public rooms absent
+from another Radmin member's list although code joining works. The wait label is
+shorter and its measured rectangle has horizontal padding. Discovery now parses
+the fixed four reply fields and then takes the complete remaining version string
+without `%n`. It also sends directed IPv4 subnet broadcasts on each active adapter,
+since limited broadcast can follow only one Windows route. The explicit Host IP
+probe remains. Network references: Microsoft [GetAdaptersAddresses](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getadaptersaddresses),
+[OnLinkPrefixLength](https://learn.microsoft.com/en-us/windows/win32/api/iptypes/ns-iptypes-ip_adapter_unicast_address_lh),
+and [SO_BROADCAST](https://learn.microsoft.com/en-us/windows/desktop/WinSock/socket-options-and-ioctls-2).
+The new discovery behavior still needs a two-PC Radmin retest.
+
 Sources consulted: the local original shell and online hooks described in finding 065,
 the LAN host/client protocol in `port/net/`, and the [PCSX2 source repository](https://github.com/PCSX2/pcsx2)
 as a reference for PS2 movie behavior. No third-party code was copied. Validation here:

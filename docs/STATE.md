@@ -24,6 +24,12 @@ cutscene wait window uses larger centered outlined text and a transparent
 background; the glyph face approximates the game's font while the game renderer
 is paused. These refinements need a player build check.
 
+2026-10-26 Radmin follow-up (finding 077): the cutscene label's clipped final
+letter is addressed with a shorter first line and horizontal padding. Public
+discovery no longer uses `%n` to find the space-containing build identity and
+probes the IPv4 broadcast address of every active adapter, including VPNs.
+Code-based joining still works; live public-list verification remains open.
+
 2026-10-24 local multiplayer change (finding 076): player-facing ONLINE now
 uses the embedded host for private H-code rooms and public LAN/Radmin rooms.
 Public discovery uses UDP 8788 and direct TCP 8787; VPN users can enter the

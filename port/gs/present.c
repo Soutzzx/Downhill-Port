@@ -40,7 +40,7 @@ static LRESULT CALLBACK cutscene_wait_proc(HWND hwnd, UINT msg, WPARAM wp, LPARA
         PAINTSTRUCT paint;
         HDC dc = BeginPaint(hwnd, &paint);
         RECT area, line;
-        static const char message[] = "WAITING FOR OTHER PLAYERS\nTO FINISH THE CUTSCENE";
+        static const char message[] = "WAITING FOR PLAYERS\nTO FINISH THE CUTSCENE";
         if (!cutscene_font) cutscene_font = CreateFontA(-38, 0, 0, 0, FW_HEAVY, TRUE, FALSE, FALSE,
                                                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                        CLEARTYPE_QUALITY, DEFAULT_PITCH, "Arial Black");
@@ -51,6 +51,7 @@ static LRESULT CALLBACK cutscene_wait_proc(HWND hwnd, UINT msg, WPARAM wp, LPARA
         HFONT previous = cutscene_font ? SelectObject(dc, cutscene_font) : NULL;
         SetBkMode(dc, TRANSPARENT);
         line = area;
+        InsetRect(&line, 24, 0);
         DrawTextA(dc, message, -1, &line, DT_CENTER | DT_CALCRECT);
         OffsetRect(&line, (area.right - line.right) / 2, (area.bottom - line.bottom) / 2);
         SetTextColor(dc, RGB(0, 0, 0));
@@ -86,8 +87,9 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             int width = area.right - area.left, height = area.bottom - area.top;
             POINT center = {width / 2, height / 2};
             ClientToScreen(hwnd, &center);
-            SetWindowPos(cutscene_wait, HWND_TOPMOST, center.x - 450, center.y - 65,
-                         900, 130, SWP_NOACTIVATE | (wp ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+            int overlay_width = width > 1200 ? 1200 : width > 40 ? width - 40 : width;
+            SetWindowPos(cutscene_wait, HWND_TOPMOST, center.x - overlay_width / 2, center.y - 65,
+                         overlay_width, 130, SWP_NOACTIVATE | (wp ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
         }
         return 0;
     }
