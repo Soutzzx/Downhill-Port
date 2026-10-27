@@ -51,7 +51,8 @@ static LRESULT CALLBACK cutscene_wait_proc(HWND hwnd, UINT msg, WPARAM wp, LPARA
         HFONT previous = cutscene_font ? SelectObject(dc, cutscene_font) : NULL;
         SetBkMode(dc, TRANSPARENT);
         line = area;
-        InsetRect(&line, 24, 0);
+        line.left += 24;
+        line.right -= 24;
         DrawTextA(dc, message, -1, &line, DT_CENTER | DT_CALCRECT);
         OffsetRect(&line, (area.right - line.right) / 2, (area.bottom - line.bottom) / 2);
         SetTextColor(dc, RGB(0, 0, 0));

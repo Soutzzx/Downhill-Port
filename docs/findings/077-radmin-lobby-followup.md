@@ -58,6 +58,13 @@ probe remains. Network references: Microsoft [GetAdaptersAddresses](https://lear
 and [SO_BROADCAST](https://learn.microsoft.com/en-us/windows/desktop/WinSock/socket-options-and-ioctls-2).
 The new discovery behavior still needs a two-PC Radmin retest.
 
+The player's clean build exposed an error in the wait-window margin change:
+`InsetRect` is not a Win32 API function. Replace it with direct `RECT.left` and
+`RECT.right` adjustments. The game objects compiled; link-time host compilation
+stopped at this one C error. The corrected `port/gs/present.c` passed Clang's
+i686 Windows syntax check with the installed Windows SDK (deprecation warnings
+only). A new complete build is still required.
+
 Sources consulted: the local original shell and online hooks described in finding 065,
 the LAN host/client protocol in `port/net/`, and the [PCSX2 source repository](https://github.com/PCSX2/pcsx2)
 as a reference for PS2 movie behavior. No third-party code was copied. Validation here:
