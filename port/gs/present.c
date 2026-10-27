@@ -50,10 +50,11 @@ static LRESULT CALLBACK cutscene_wait_proc(HWND hwnd, UINT msg, WPARAM wp, LPARA
         DeleteObject(clear);
         HFONT previous = cutscene_font ? SelectObject(dc, cutscene_font) : NULL;
         SetBkMode(dc, TRANSPARENT);
+        /* DT_CALCRECT measures advance widths only; the italic overhang of each line's
+           last letter lies past them, so widen the box and draw without clipping. */
         line = area;
-        line.left += 24;
-        line.right -= 24;
         DrawTextA(dc, message, -1, &line, DT_CENTER | DT_CALCRECT);
+        line.right += 48;
         OffsetRect(&line, (area.right - line.right) / 2, (area.bottom - line.bottom) / 2);
         SetTextColor(dc, RGB(0, 0, 0));
         for (int y = -2; y <= 2; y++)
@@ -61,10 +62,10 @@ static LRESULT CALLBACK cutscene_wait_proc(HWND hwnd, UINT msg, WPARAM wp, LPARA
                 if (!x && !y) continue;
                 RECT outline = line;
                 OffsetRect(&outline, x, y);
-                DrawTextA(dc, message, -1, &outline, DT_CENTER);
+                DrawTextA(dc, message, -1, &outline, DT_CENTER | DT_NOCLIP);
             }
         SetTextColor(dc, RGB(255, 245, 220));
-        DrawTextA(dc, message, -1, &line, DT_CENTER);
+        DrawTextA(dc, message, -1, &line, DT_CENTER | DT_NOCLIP);
         if (previous) SelectObject(dc, previous);
         EndPaint(hwnd, &paint);
         return 0;

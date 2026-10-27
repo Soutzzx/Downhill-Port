@@ -65,6 +65,21 @@ stopped at this one C error. The corrected `port/gs/present.c` passed Clang's
 i686 Windows syntax check with the installed Windows SDK (deprecation warnings
 only). A new complete build is still required.
 
+The next test showed three issues. (1) Kineticlops was selectable online but stayed
+inside the mountain. The rider screen's setup (func_001EC398) leaves carousel slot 14's
+mountain closed when the save's state byte D_004B25A0.x4A is 0 or its latch
+D_004C67B8 (D_004C6780[14]) is 1; only the carousel's arrival in func_001F24B8 opens it,
+and only while that latch is 1. The online unlock cleared every latch, so the reveal
+never ran. The unlock now sets latch 14 when the mountain was still closed, so arriving
+at Kineticlops plays retail's reveal. (2) The last italic letter was still clipped:
+DT_CALCRECT measures advance widths without the italic overhang, and DrawText clips
+to the rectangle. The measured box is widened after measuring and drawn with
+DT_NOCLIP. (3) The public list showed one room three times: the host answers each
+probe (limited broadcast plus every subnet broadcast) from the adapter it arrived on,
+and the list was deduplicated by address. It is now deduplicated by the random room
+code, keeping the first address that answered. All three changed files pass Clang's
+i686 Windows syntax check; build and live retest pending.
+
 Sources consulted: the local original shell and online hooks described in finding 065,
 the LAN host/client protocol in `port/net/`, and the [PCSX2 source repository](https://github.com/PCSX2/pcsx2)
 as a reference for PS2 movie behavior. No third-party code was copied. Validation here:

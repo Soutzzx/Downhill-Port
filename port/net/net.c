@@ -246,7 +246,9 @@ int net_list_lobbies(NetLobbyInfo *out, int max)
         char ip[INET_ADDRSTRLEN];
         if(!InetNtopA(AF_INET,&sender.sin_addr,ip,sizeof ip))continue;
         int duplicate=0;
-        for(int i=0;i<count;i++)if(!strcmp(out[i].address,ip))duplicate=1;
+        /* A host answers once per adapter the probes reach (LAN, Radmin, the broadcast
+           and each subnet broadcast), so its one room is kept by code, at the first address. */
+        for(int i=0;i<count;i++)if(!strcmp(out[i].code,code))duplicate=1;
         if(duplicate)continue;
         NetLobbyInfo *l=&out[count++];memset(l,0,sizeof *l);
         snprintf(l->code,sizeof l->code,"%s",code);

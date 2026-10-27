@@ -175,6 +175,7 @@ static void unlock_all(void)
 {
     if (unlocked) return;
     uint8_t *flags = (uint8_t *)(uintptr_t)(0x08000000u + UNLOCK_FLAGS);
+    int kineticlops_hidden = !*(uint8_t *)(uintptr_t)(0x08000000u + 0x4B25A0 + 0x3C + 14);
     kept_pros = SHELL_WORD(UNLOCK_PROS), kept_tracks = SHELL_WORD(UNLOCK_TRACKS);
     kept_riders = SHELL_WORD(UNLOCK_RIDERS), kept_bikes = SHELL_WORD(UNLOCK_BIKES);
     memcpy(kept_flags, flags, sizeof kept_flags);
@@ -187,6 +188,10 @@ static void unlock_all(void)
     /* The carousel keeps a separate transition latch for each rider. Its
        previous locked state can linger after the save flags are opened. */
     for (int i = 1; i < 15; i++) SHELL_WORD(0x4C6780 + 4 * i) = 0;
+    /* Kineticlops (carousel slot 14) stays inside the mountain from the screen's setup
+       (func_001EC398) until the carousel reaches him with his latch set; then func_001F24B8
+       plays retail's reveal, as after a fresh unlock. Without it he is selectable but unseen. */
+    if (kineticlops_hidden) SHELL_WORD(0x4C6780 + 4 * 14) = 1;
     hle_mc_hold = unlocked = 1;
     hle_log("online menu: everything unlocked while online\n");
 }

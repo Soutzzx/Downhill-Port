@@ -1,5 +1,11 @@
 # State
 
+2026-10-27 follow-up (finding 077): online Kineticlops now leaves the mountain
+(his carousel latch is kept so retail's reveal plays on arrival); the wait text
+is measured with room for the italic overhang and drawn unclipped; public rooms
+are deduplicated by room code, not by the address of each adapter that answered.
+Syntax-checked only; build and player retest pending.
+
 2026-10-26 Radmin lobby follow-up (finding 077): LAN public discovery now reads the
 whole space-containing build identity, so compatible rooms can be selected. The
 room allows two players to Ready with the same rider. A centered wait message is
