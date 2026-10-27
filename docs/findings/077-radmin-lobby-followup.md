@@ -70,8 +70,15 @@ inside the mountain. The rider screen's setup (func_001EC398) leaves carousel sl
 mountain closed when the save's state byte D_004B25A0.x4A is 0 or its latch
 D_004C67B8 (D_004C6780[14]) is 1; only the carousel's arrival in func_001F24B8 opens it,
 and only while that latch is 1. The online unlock cleared every latch, so the reveal
-never ran. The unlock now sets latch 14 when the mountain was still closed, so arriving
-at Kineticlops plays retail's reveal. (2) The last italic letter was still clipped:
+never ran. A first attempt set latch 14 so the arrival would play the reveal; the
+player then saw every pro as a statue, and wants everything already unlocked with no
+reveal. Statue poses are set only at screen setup (func_001F5100), before the online
+unlock. Retail's own unlock-all (func_001F0780) follows func_001BB670 and func_001F66B0
+with func_001F7DE0 when D_004B25A0.x118 is set: it poses pros 7-14 alive at once and sets
+Kineticlops' mountain (D_00275BB0[14], animation D_00275C68[0] frame 5) to its open end.
+The online unlock now clears the latches and calls func_001F7DE0 under the same guard.
+Relocking does not call it, since it also runs after a race when the rider screen is not
+loaded; the next screen setup poses from the restored flags. (2) The last italic letter was still clipped:
 DT_CALCRECT measures advance widths without the italic overhang, and DrawText clips
 to the rectangle. The measured box is widened after measuring and drawn with
 DT_NOCLIP. (3) The public list showed one room three times: the host answers each

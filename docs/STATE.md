@@ -1,7 +1,8 @@
 # State
 
-2026-10-27 follow-up (finding 077): online Kineticlops now leaves the mountain
-(his carousel latch is kept so retail's reveal plays on arrival); the wait text
+2026-10-27 follow-up (finding 077): the online unlock now re-poses the rider
+screen with retail's func_001F7DE0, so every pro is alive and Kineticlops' mountain
+is already open, with no statues or reveal animation; the wait text
 is measured with room for the italic overhang and drawn unclipped; public rooms
 are deduplicated by room code, not by the address of each adapter that answered.
 Syntax-checked only; build and player retest pending.

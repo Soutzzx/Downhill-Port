@@ -167,6 +167,7 @@ static void selection_end(void)
 enum { UNLOCK_PROS = 0x4346B0, UNLOCK_TRACKS = 0x4346B4, UNLOCK_RIDERS = 0x434720, UNLOCK_BIKES = 0x434728,
        UNLOCK_FLAGS = 0x434730 };
 void func_001BB670(void *game);
+void func_001F7DE0(void);  /* re-pose the rider screen's pros and Kineticlops' mountain */
 static int unlocked;
 static int32_t kept_pros, kept_tracks, kept_riders, kept_bikes;
 static uint8_t kept_flags[23];
@@ -175,7 +176,6 @@ static void unlock_all(void)
 {
     if (unlocked) return;
     uint8_t *flags = (uint8_t *)(uintptr_t)(0x08000000u + UNLOCK_FLAGS);
-    int kineticlops_hidden = !*(uint8_t *)(uintptr_t)(0x08000000u + 0x4B25A0 + 0x3C + 14);
     kept_pros = SHELL_WORD(UNLOCK_PROS), kept_tracks = SHELL_WORD(UNLOCK_TRACKS);
     kept_riders = SHELL_WORD(UNLOCK_RIDERS), kept_bikes = SHELL_WORD(UNLOCK_BIKES);
     memcpy(kept_flags, flags, sizeof kept_flags);
@@ -188,10 +188,10 @@ static void unlock_all(void)
     /* The carousel keeps a separate transition latch for each rider. Its
        previous locked state can linger after the save flags are opened. */
     for (int i = 1; i < 15; i++) SHELL_WORD(0x4C6780 + 4 * i) = 0;
-    /* Kineticlops (carousel slot 14) stays inside the mountain from the screen's setup
-       (func_001EC398) until the carousel reaches him with his latch set; then func_001F24B8
-       plays retail's reveal, as after a fresh unlock. Without it he is selectable but unseen. */
-    if (kineticlops_hidden) SHELL_WORD(0x4C6780 + 4 * 14) = 1;
+    /* The rider screen poses its pros once, at setup. As func_001F0780 does after its
+       unlock, func_001F7DE0 re-poses them at once: pros 7-14 alive (no statue, no unlock
+       animation) and Kineticlops' mountain already open. D_004B25A0.x118: the screen is set up. */
+    if (SHELL_WORD(0x4B25A0 + 0x118)) func_001F7DE0();
     hle_mc_hold = unlocked = 1;
     hle_log("online menu: everything unlocked while online\n");
 }
