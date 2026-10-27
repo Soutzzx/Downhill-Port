@@ -25,6 +25,7 @@ static uint32_t pixels[1024 * 1024];
 static int initialized, disabled, resize_pending;
 static volatile LONG window_closed;
 static HWND cutscene_wait;
+static HFONT cutscene_font;
 /* Presentation for low latency and variable refresh (round 38, finding 052): a flip-model chain
    that may tear (G-SYNC/FreeSync show each picture when presented; the port's own limiter paces
    them, kernel.c) and holds at most one frame (the frame-latency waitable object, else the
@@ -38,16 +39,35 @@ static LRESULT CALLBACK cutscene_wait_proc(HWND hwnd, UINT msg, WPARAM wp, LPARA
     if (msg == WM_PAINT) {
         PAINTSTRUCT paint;
         HDC dc = BeginPaint(hwnd, &paint);
-        RECT area;
+        RECT area, line;
+        static const char message[] = "WAITING FOR OTHER PLAYERS\nTO FINISH THE CUTSCENE";
+        if (!cutscene_font) cutscene_font = CreateFontA(-38, 0, 0, 0, FW_HEAVY, TRUE, FALSE, FALSE,
+                                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                       CLEARTYPE_QUALITY, DEFAULT_PITCH, "Arial Black");
         GetClientRect(hwnd, &area);
-        FillRect(dc, &area, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        HBRUSH clear = CreateSolidBrush(RGB(1, 2, 3));
+        FillRect(dc, &area, clear);
+        DeleteObject(clear);
+        HFONT previous = cutscene_font ? SelectObject(dc, cutscene_font) : NULL;
         SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, RGB(255, 255, 255));
-        DrawTextA(dc, "Waiting for other players to finish the cutscene or load",
-                  -1, &area, DT_CENTER | DT_VCENTER | DT_WORDBREAK);
+        line = area;
+        DrawTextA(dc, message, -1, &line, DT_CENTER | DT_CALCRECT);
+        OffsetRect(&line, (area.right - line.right) / 2, (area.bottom - line.bottom) / 2);
+        SetTextColor(dc, RGB(0, 0, 0));
+        for (int y = -2; y <= 2; y++)
+            for (int x = -2; x <= 2; x++) {
+                if (!x && !y) continue;
+                RECT outline = line;
+                OffsetRect(&outline, x, y);
+                DrawTextA(dc, message, -1, &outline, DT_CENTER);
+            }
+        SetTextColor(dc, RGB(255, 245, 220));
+        DrawTextA(dc, message, -1, &line, DT_CENTER);
+        if (previous) SelectObject(dc, previous);
         EndPaint(hwnd, &paint);
         return 0;
     }
+    if (msg == WM_DESTROY && cutscene_font) { DeleteObject(cutscene_font); cutscene_font = NULL; }
     return DefWindowProcA(hwnd, msg, wp, lp);
 }
 
@@ -55,9 +75,10 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     if (msg == WM_APP + 1) {
         if (wp && !cutscene_wait) {
-            cutscene_wait = CreateWindowExA(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-                                           "DHDCutsceneWait", "", WS_POPUP, 0, 0, 520, 60,
+            cutscene_wait = CreateWindowExA(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+                                           "DHDCutsceneWait", "", WS_POPUP, 0, 0, 900, 130,
                                            hwnd, NULL, GetModuleHandleA(NULL), NULL);
+            if (cutscene_wait) SetLayeredWindowAttributes(cutscene_wait, RGB(1, 2, 3), 0, LWA_COLORKEY);
         }
         if (cutscene_wait) {
             RECT area;
@@ -65,8 +86,8 @@ static LRESULT CALLBACK window_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             int width = area.right - area.left, height = area.bottom - area.top;
             POINT center = {width / 2, height / 2};
             ClientToScreen(hwnd, &center);
-            SetWindowPos(cutscene_wait, HWND_TOPMOST, center.x - 260, center.y - 30,
-                         520, 60, SWP_NOACTIVATE | (wp ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+            SetWindowPos(cutscene_wait, HWND_TOPMOST, center.x - 450, center.y - 65,
+                         900, 130, SWP_NOACTIVATE | (wp ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
         }
         return 0;
     }

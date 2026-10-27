@@ -16,6 +16,14 @@ and returns to RACE ROOM. The cutscene wait message is now a separate owned wind
 because the child overlay was not visible in the player's test. Both changes need
 a new multiplayer build and live check.
 
+2026-10-26 follow-up (finding 077): after the player's successful test, online
+customization was returned to the earlier skip path at their request; the modal
+shop work remains in Git history for later use. The rider carousel's stale
+locked-animation latches are cleared when online unlocks are applied. The working
+cutscene wait window uses larger centered outlined text and a transparent
+background; the glyph face approximates the game's font while the game renderer
+is paused. These refinements need a player build check.
+
 2026-10-24 local multiplayer change (finding 076): player-facing ONLINE now
 uses the embedded host for private H-code rooms and public LAN/Radmin rooms.
 Public discovery uses UDP 8788 and direct TCP 8787; VPN users can enter the

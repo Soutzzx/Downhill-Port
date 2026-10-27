@@ -102,6 +102,7 @@ void func_0023D898(int view, float *distance, float *aspect);
 void func_0023D8D8(int view, float distance, float aspect);
 float func_00203C28(void *animation);
 void func_001F79D8(int level, int frames);  /* the shell's screen fade */
+extern int D_00275CB0[];  /* each rider's camera take out of the shop */
 int func_00220230(int port);  /* the buttons held on a pad */
 static float shell_distance, shell_aspect;
 static int offline_mode, offline_submode, offline_players;
@@ -183,6 +184,9 @@ static void unlock_all(void)
     SHELL_WORD(UNLOCK_RIDERS) |= 0xFFFF;
     SHELL_WORD(UNLOCK_BIKES) |= 0x3FFFF;
     memset(flags, 1, sizeof kept_flags);
+    /* The carousel keeps a separate transition latch for each rider. Its
+       previous locked state can linger after the save flags are opened. */
+    for (int i = 1; i < 15; i++) SHELL_WORD(0x4C6780 + 4 * i) = 0;
     hle_mc_hold = unlocked = 1;
     hle_log("online menu: everything unlocked while online\n");
 }
@@ -916,8 +920,18 @@ int port_online_shell(void)
     NetLobby connection;
     net_get_lobby(&connection);
     int lost = connection.state == NET_FAILED || connection.state == NET_IDLE;
-    /* Retail menu 18 opens the bike/outfit shop modally. Let it run; the hook
-       immediately after func_00139BF8 returns the completed choice to the room. */
+    if (menu == 18) {
+        /* Keep the original online handoff before retail's level popup. The
+           modal customization path remains in history for later work. */
+        void *animation = (void *)(uintptr_t)(0x08000000u + 0x4C6370);
+        int rider_index = SHELL_WORD(0x4C6910 + 4 * SHELL_WORD(0x29DF68));
+        func_00203590(animation, 0x2330, 0, D_00275CB0[rider_index]);
+        if (func_00203C28(animation) < 1.0f) return 0;
+        if (!lost) keep_selection();
+        selection_end();
+        func_001F79D8(0, 0x3C);
+        return 1;
+    }
     /* Reaching the retail rider screen is required before treating the
        transitional 15/0 menu as 'Back'. Without this guard, clicking Choose
        immediately reopens RACE ROOM and skips the rider/bike/outfit shop. */
@@ -993,23 +1007,3 @@ int port_online_guest_track(void)
 }
 
 int port_online_single_race(void) { return choosing; }
-
-/* The retail shop's next popup is SELECT LEVEL. Its update runs before that
-   popup reads a level choice; close the modal here so only RACE ROOM starts a race. */
-int port_online_level_reached(void)
-{
-    if (!choosing) return 0;
-    *(uint8_t *)(uintptr_t)(0x08000000u + 0x3F53FD) = 1;
-    return 1;
-}
-
-/* Called after the retail modal closes, before the shell starts loading a race.
-   A cancelled shop follows retail's own back path. */
-int port_online_shop_finished(void)
-{
-    if (!choosing || SHELL_WORD(0x3F53FC)) return 0;
-    keep_selection();
-    selection_end();
-    func_001F79D8(0, 0x3C);
-    return 1;
-}

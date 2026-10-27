@@ -36,6 +36,17 @@ replaced with an owned, topmost, non-activating window painted by the window thr
 so it can remain visible while the game thread waits. The exact wait phase and
 fullscreen behavior still need a two-PC retest.
 
+The player confirmed the wait window appears, and the level screen is prevented from
+starting a solo race, but the modal exit leaves an awkward mountain camera and the
+rider carousel looks locked. At the player's request the modal customization and
+level intercepts are removed, restoring the earlier menu-18 handoff. These edits
+remain in commits d7c748c and 97aecaf if customization is revisited. The unlock
+routine now clears the carousel's per-rider transition latches (D_004C6780), which
+could still show the old locked state after the selectable flags were opened.
+The wait window now centers a larger outlined, italic font over a transparent
+background. It approximates the retail font because the game renderer is blocked
+during this wait; the separate Win32 window cannot use its GS text packets.
+
 Sources consulted: the local original shell and online hooks described in finding 065,
 the LAN host/client protocol in `port/net/`, and the [PCSX2 source repository](https://github.com/PCSX2/pcsx2)
 as a reference for PS2 movie behavior. No third-party code was copied. Validation here:
